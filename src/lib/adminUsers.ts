@@ -63,3 +63,6 @@ export const createStaffUser = (v: { fullName: string; role: StaffRole; branchId
 
 export const resetUserPassword = (userId: string, newPassword: string) =>
   callAdmin<Record<string, never>>({ action: 'reset_password', user_id: userId, new_password: newPassword });
+
+export const revokeStaffAccess = (userId: string) =>
+  callAdmin<Record<string, never>>({ action: 'revoke_access', user_id: userId });

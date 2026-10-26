@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Building2, CheckCircle2, KeyRound, Pencil, Plus, Search, Shield, UserCog, Users, XCircle } from 'lucide-react';
+import { Building2, CheckCircle2, KeyRound, Pencil, Plus, Search, Shield, Trash2, UserCog, Users, XCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -7,7 +7,8 @@ import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/ui/Button';
 import { Field, inputClass } from '../../components/ui/Field';
 import { EmptyState, ErrorState } from '../../components/ui/States';
-import { STAFF_ROLE_LABEL, StaffRole, createStaffUser, previewCorporateEmail, resetUserPassword, validatePassword, validatePhone } from '../../lib/adminUsers';
+import { STAFF_ROLE_LABEL, StaffRole, createStaffUser, previewCorporateEmail, resetUserPassword, revokeStaffAccess, validatePassword, validatePhone } from '../../lib/adminUsers';
+import { canDeleteMember } from '../../lib/memberActions';
 import { TeamMember, UserRole } from '../../types';
 
 const ROLE_LABEL: Record<UserRole, string> = { owner: 'Pemilik', branch_admin: 'Admin Cabang', cashier: 'Kasir', kitchen: 'Dapur', customer: 'Pelanggan' };
@@ -33,7 +34,7 @@ export const AdminHakAkses: React.FC = () => {
 
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
-  const [mode, setMode] = useState<null | 'create' | 'edit' | 'password'>(null);
+  const [mode, setMode] = useState<null | 'create' | 'edit' | 'password' | 'revoke'>(null);
   const [target, setTarget] = useState<TeamMember | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -104,6 +105,11 @@ export const AdminHakAkses: React.FC = () => {
     reset();
     setTarget(u);
     setMode('password');
+  };
+  const openRevoke = (u: TeamMember) => {
+    reset();
+    setTarget(u);
+    setMode('revoke');
   };
 
   const submitCreate = async (e: React.FormEvent) => {
@@ -184,6 +190,20 @@ export const AdminHakAkses: React.FC = () => {
     addToast(res.ok ? 'success' : 'error', res.ok ? `Akses ${u.name} ${next === 'active' ? 'diaktifkan' : 'dinonaktifkan'}.` : res.error);
   };
 
+  const submitRevoke = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busy || !target) return;
+    setBusy(true);
+    setErr(null);
+    const res = await revokeStaffAccess(target.id);
+    setBusy(false);
+    if (!res.ok) return setErr(res.error);
+    addToast('success', `Akses ${target.name} dicabut. Email korporatnya bebas dipakai ulang.`);
+    setMode(null);
+    setTarget(null);
+    await reloadData();
+  };
+
   const pwFields = (
     <>
       {isSelf && (
@@ -231,7 +251,7 @@ export const AdminHakAkses: React.FC = () => {
     </>
   );
 
-  const title = mode === 'create' ? 'Tambah Pengguna Internal' : mode === 'edit' ? `Edit Akses: ${target?.name ?? ''}` : isSelf ? 'Ubah Kata Sandi Saya' : `Ubah Kata Sandi: ${target?.name ?? ''}`;
+  const title = mode === 'create' ? 'Tambah Pengguna Internal' : mode === 'edit' ? `Edit Akses: ${target?.name ?? ''}` : mode === 'revoke' ? `Cabut Akses: ${target?.name ?? ''}` : isSelf ? 'Ubah Kata Sandi Saya' : `Ubah Kata Sandi: ${target?.name ?? ''}`;
   const formId = 'user-form';
 
   return (
@@ -281,6 +301,7 @@ export const AdminHakAkses: React.FC = () => {
                   filtered.map((u) => {
                     const self = u.id === currentUser?.id;
                     const manageable = isOwner && u.role !== 'owner' && !self;
+                    const revocable = isOwner && canDeleteMember('owner', { role: u.role, isSelf: self });
                     return (
                       <tr key={u.id} className="hover:bg-nnorte-surface-2/60">
                         <td className="px-4 py-3">
@@ -310,6 +331,9 @@ export const AdminHakAkses: React.FC = () => {
                             {manageable && (
                               <button type="button" aria-label={u.status === 'active' ? `Nonaktifkan ${u.name}` : `Aktifkan ${u.name}`} title={u.status === 'active' ? 'Nonaktifkan akses' : 'Aktifkan akses'} onClick={() => void toggleStatus(u)} className="nn-press inline-flex min-h-9 min-w-9 cursor-pointer items-center justify-center rounded-lg border border-nnorte-border bg-nnorte-surface-2 text-nnorte-muted hover:border-nnorte-blue/40 hover:text-nnorte-text"><UserCog size={14} /></button>
                             )}
+                            {revocable && (
+                              <button type="button" aria-label={`Cabut akses ${u.name}`} title="Cabut akses permanen" onClick={() => openRevoke(u)} className="nn-press inline-flex min-h-9 min-w-9 cursor-pointer items-center justify-center rounded-lg border border-nnorte-border bg-nnorte-surface-2 text-nnorte-muted hover:border-nnorte-red/60 hover:text-nnorte-red"><Trash2 size={14} /></button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -328,11 +352,13 @@ export const AdminHakAkses: React.FC = () => {
         busy={busy}
         title={title}
         titleClassName="text-xl"
-        maxWidth="xl"
+        maxWidth={mode === 'revoke' ? 'sm' : 'xl'}
         footer={
           <>
             <Button variant="secondary" onClick={close} disabled={busy}>Batal</Button>
-            <Button type="submit" form={formId} loading={busy} loadingText="Menyimpan…">{mode === 'create' ? 'Buat Akun' : mode === 'password' ? 'Ubah Kata Sandi' : 'Simpan'}</Button>
+            <Button type="submit" form={formId} variant={mode === 'revoke' ? 'danger' : 'primary'} loading={busy} loadingText={mode === 'revoke' ? 'Mencabut…' : 'Menyimpan…'}>
+              {mode === 'create' ? 'Buat Akun' : mode === 'password' ? 'Ubah Kata Sandi' : mode === 'revoke' ? 'Cabut Akses' : 'Simpan'}
+            </Button>
           </>
         }
       >
@@ -422,6 +448,20 @@ export const AdminHakAkses: React.FC = () => {
           <form id={formId} onSubmit={submitPassword} noValidate autoComplete="off" className="flex flex-col gap-4">
             <ErrBox msg={err} />
             {pwFields}
+          </form>
+        )}
+        {mode === 'revoke' && (
+          <form id={formId} onSubmit={submitRevoke} noValidate className="flex flex-col gap-4">
+            <ErrBox msg={err} />
+            <p className="text-sm text-nnorte-text">
+              Cabut akses <span className="font-bold">{target?.name}</span>
+              {target && <> ({ROLE_LABEL[target.role]})</>} secara permanen?
+            </p>
+            <ul className="list-disc space-y-1 pl-5 text-xs text-nnorte-muted">
+              <li>Akun langsung keluar dari daftar tim dan tidak bisa login lagi dengan email korporatnya.</li>
+              <li>Email korporat <span className="font-mono text-nnorte-text">{target?.email}</span> bebas dipakai untuk akun baru.</li>
+              <li>Riwayat audit dan pengeluaran tetap tersimpan.</li>
+            </ul>
           </form>
         )}
       </Modal>

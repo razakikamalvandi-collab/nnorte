@@ -1,5 +1,6 @@
 import { customerSupabase } from './supabase';
 import { buildRatingPayload, type RatingSubmission } from './ratings';
+import type { MenuIngredient } from '../types';
 
 /** API portal pelanggan: hanya RPC publik `portal_*` (harga & total dihitung server). */
 export interface PortalBranch {
@@ -31,6 +32,8 @@ export interface PortalMenuItem {
   isPopular: boolean;
   isSpicy: boolean;
   prepMinutes: number;
+  ingredients: MenuIngredient[];
+  allergens: string[];
   variants: PortalVariant[];
   addons: PortalAddon[];
   soldOut: boolean;
@@ -106,6 +109,16 @@ export async function fetchMenu(branchId: string): Promise<PortalMenuItem[]> {
     id: s(r.menu_item_id), name: s(r.name), category: s(r.category), description: s(r.description),
     image: s(r.image_url) || undefined, price: n(r.price), isPopular: r.is_popular === true, isSpicy: r.is_spicy === true,
     prepMinutes: n(r.preparation_time_minutes),
+    ingredients: Array.isArray(r.ingredients)
+      ? r.ingredients.flatMap((ingredient): MenuIngredient[] => {
+        if (typeof ingredient !== 'object' || ingredient === null) return [];
+        const item = ingredient as Row;
+        const quantity = Number(item.quantity);
+        if (typeof item.name !== 'string' || typeof item.unit !== 'string' || !Number.isFinite(quantity)) return [];
+        return [{ name: item.name, quantity, unit: item.unit }];
+      })
+      : [],
+    allergens: Array.isArray(r.allergens) ? r.allergens.filter((allergen): allergen is string => typeof allergen === 'string') : [],
     variants: Array.isArray(r.variants) ? (r.variants as PortalVariant[]) : [],
     addons: Array.isArray(r.addons) ? (r.addons as Row[]).map((a) => ({ id: s(a.id), name: s(a.name), price: n(a.price) })) : [],
     soldOut: r.is_sold_out === true,

@@ -65,6 +65,8 @@ export type OrderFactory3DProps = {
   orderReview?: string | null;
   /** Simpan rating ke database. Harus melempar error bila gagal. */
   onRate?: (ratings: RatingSubmit[]) => Promise<void>;
+  /** Dipanggil saat pengguna menekan "Tambah pesanan lain" di layar terimakasih. */
+  onRateDone?: () => void;
 };
 
 export function OrderFactory3D({
@@ -78,6 +80,7 @@ export function OrderFactory3D({
   orderRating = null,
   orderReview = null,
   onRate,
+  onRateDone,
 }: OrderFactory3DProps) {
   const { theme } = useTheme();
   const sceneRef = useRef<HTMLDivElement>(null);
@@ -223,6 +226,14 @@ export function OrderFactory3D({
           orderRating={orderRating}
           orderReview={orderReview}
           onSubmit={onRate}
+          onDone={
+            onRateDone
+              ? () => {
+                  closeRate();
+                  onRateDone();
+                }
+              : undefined
+          }
           onClose={closeRate}
         />
       )}

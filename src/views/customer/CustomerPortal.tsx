@@ -36,6 +36,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { Modal } from '../../components/common/Modal';
+import MenuNutritionPanel from '../../components/portal/MenuNutritionPanel';
 import { ThemeToggle } from '../../components/common/ThemeToggle';
 import { SplashScreen } from '../../components/customer/SplashScreen';
 import type { TrackItem } from '../../components/customer/OrderFactory3D';
@@ -537,7 +538,6 @@ export const CustomerPortal: React.FC = () => {
   };
 
   const openItem = (m: PortalMenuItem) => {
-    if (m.addons.length === 0 && m.variants.length === 0) return addToCart(m);
     setOpt({ addonIds: [], variants: Object.fromEntries(m.variants.map((v) => [v.name, v.options[0] ?? ''])), notes: '' });
     setOptionFor(m);
   };
@@ -928,11 +928,22 @@ export const CustomerPortal: React.FC = () => {
                           {m.soldOut ? (
                             <span className="text-[10px] font-semibold text-nnorte-muted">Habis</span>
                           ) : m.addons.length === 0 && m.variants.length === 0 ? (
-                            <AddToCartAnimation
-                              product={{ id: m.id, name: m.name, price: m.price, image: m.image ?? '' }}
-                              cartRef={cartRef}
-                              onAdd={() => addToCart(m)}
-                            />
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                aria-label={`Lihat detail ${m.name}`}
+                                title="Lihat detail"
+                                onClick={() => openItem(m)}
+                                className="nn-press inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-nnorte-border text-nnorte-muted hover:border-nnorte-blue/40 hover:text-nnorte-text"
+                              >
+                                <Info size={15} aria-hidden="true" />
+                              </button>
+                              <AddToCartAnimation
+                                product={{ id: m.id, name: m.name, price: m.price, image: m.image ?? '' }}
+                                cartRef={cartRef}
+                                onAdd={() => addToCart(m)}
+                              />
+                            </div>
                           ) : (
                             <button
                               type="button"
@@ -1244,6 +1255,7 @@ export const CustomerPortal: React.FC = () => {
                       orderRating={ratings?.orderRating ?? null}
                       orderReview={ratings?.orderReview ?? null}
                       onRate={ratingsReady && canRateOrder ? handleRate : undefined}
+                      onRateDone={() => { setOrderTab('cart'); closeAndBrowse(); }}
                     />
                   </React.Suspense>
                 </div>
@@ -1476,13 +1488,14 @@ export const CustomerPortal: React.FC = () => {
         isOpen={optionFor !== null}
         onClose={() => setOptionFor(null)}
         title={optionFor?.name ?? ''}
-        subtitle="Sesuaikan pesanan Anda"
+        subtitle="Informasi menu dan sesuaikan pesanan Anda"
         maxWidth="md"
         footer={optionFor ? <Button className="w-full sm:w-auto" onClick={confirmAddOption}>Tambah ke Keranjang · {formatRupiah(optUnit)}</Button> : undefined}
       >
         {optionFor && (
           <div className="flex flex-col gap-4">
             {optionFor.image && <img src={optionFor.image} alt="" className="h-32 w-full rounded-xl object-cover" />}
+            <MenuNutritionPanel ingredients={optionFor.ingredients} allergens={optionFor.allergens} />
             {optionFor.variants.map((v) => (
               <Field key={v.name} label={v.name}>
                 <select className={inputClass()} value={opt.variants[v.name] ?? ''} onChange={(e) => setOpt((o) => ({ ...o, variants: { ...o.variants, [v.name]: e.target.value } }))}>

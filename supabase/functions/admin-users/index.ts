@@ -6,10 +6,14 @@
 // Aksi (POST JSON):
 //   { action: "create_user",    full_name, role, branch_id, password, phone? }
 //   { action: "reset_password", user_id, new_password }
+//   { action: "revoke_access",  user_id }
 //
-// Hanya PEMILIK UTAMA (membership role = owner, status = active) yang boleh memanggil.
-// Email korporat dibuat di server (RPC corporate_email_for) sehingga klien tidak bisa
-// memilih alamat sembarang. Password tidak pernah ditulis ke log maupun audit.
+// create_user & reset_password hanya untuk PEMILIK UTAMA (membership role = owner,
+// status = active). revoke_access juga boleh dari ADMIN CABANG aktif, dengan cakupan
+// sempit: hanya kasir/dapur di cabangnya sendiri. Tidak ada yang dapat menembak owner
+// atau dirinya sendiri. Email korporat dibuat di server (RPC corporate_email_for)
+// sehingga klien tidak bisa memilih alamat sembarang. Password tidak pernah ditulis
+// ke log maupun audit.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -73,17 +77,19 @@ Deno.serve(async (req: Request) => {
     if (userErr || !userData.user) throw new HttpError(401, "Sesi tidak valid. Silakan login ulang.");
     const caller = userData.user;
 
-    // Pemanggil wajib owner aktif.
-    const { data: ownerRows, error: ownerErr } = await userClient
+    // Pemanggil wajib owner aktif (semua aksi) atau admin cabang aktif (revoke_access).
+    const { data: callerRows, error: callerErr } = await userClient
       .from("memberships")
-      .select("restaurant_id")
+      .select("restaurant_id, role, branch_id")
       .eq("user_id", caller.id)
-      .eq("role", "owner")
-      .eq("status", "active")
-      .limit(1);
-    if (ownerErr) throw new HttpError(500, "Gagal memeriksa hak akses.");
-    const restaurantId = ownerRows?.[0]?.restaurant_id as string | undefined;
-    if (!restaurantId) throw new HttpError(403, "Hanya pemilik utama yang dapat mengelola akun pengguna.");
+      .eq("status", "active");
+    if (callerErr) throw new HttpError(500, "Gagal memeriksa hak akses.");
+    const ownerRow = callerRows?.find((m) => m.role === "owner");
+    const staffAdminRow = callerRows?.find((m) => m.role === "branch_admin");
+    const restaurantId = (ownerRow?.restaurant_id ?? staffAdminRow?.restaurant_id) as string | undefined;
+    const callerRole: "owner" | "branch_admin" | undefined = ownerRow ? "owner" : staffAdminRow ? "branch_admin" : undefined;
+    const callerBranchId = (staffAdminRow?.branch_id ?? null) as string | null;
+    if (!restaurantId || !callerRole) throw new HttpError(403, "Anda tidak memiliki izin untuk melakukan aksi ini.");
 
     // Klien administrator (service role) - hanya untuk operasi di bawah.
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
@@ -112,6 +118,7 @@ Deno.serve(async (req: Request) => {
 
     // ------------------------------------------------------------------ create_user
     if (payload.action === "create_user") {
+      if (callerRole !== "owner") throw new HttpError(403, "Hanya pemilik utama yang dapat mengelola akun pengguna.");
       const fullName = typeof payload.full_name === "string" ? payload.full_name.trim() : "";
       const role = payload.role as AssignableRole;
       const branchId = payload.branch_id;
@@ -189,6 +196,7 @@ Deno.serve(async (req: Request) => {
 
     // -------------------------------------------------------------- reset_password
     if (payload.action === "reset_password") {
+      if (callerRole !== "owner") throw new HttpError(403, "Hanya pemilik utama yang dapat mengelola akun pengguna.");
       const userId = payload.user_id;
       const newPassword = validatePassword(payload.new_password);
       if (typeof userId !== "string" || !UUID_RE.test(userId)) throw new HttpError(400, "Pengguna tidak valid.");
@@ -210,6 +218,86 @@ Deno.serve(async (req: Request) => {
       if (updErr) throw new HttpError(400, "Gagal mengubah kata sandi: " + updErr.message);
 
       await audit(membership.branch_id as string | null, "RESET_PASSWORD", `Kata sandi pengguna ${userId} direset oleh pemilik`);
+      return json(req, 200, { ok: true });
+    }
+
+    // ----------------------------------------------------------------- revoke_access
+    // "Hapus" staf: membership dihapus + email korporat ditukar ke placeholder internal.
+    // Akun Auth & profil TIDAK dihapus (riwayat audit/pengeluaran tetap tertaut), tetapi
+    // orang itu tidak bisa login lagi dengan email korporat lama (emailnya ditukar diam-
+    // diam) dan email lama langsung bebas dipakai staf baru.
+    if (payload.action === "revoke_access") {
+      const userId = payload.user_id;
+      if (typeof userId !== "string" || !UUID_RE.test(userId)) throw new HttpError(400, "Pengguna tidak valid.");
+      if (userId === caller.id) throw new HttpError(400, "Tidak dapat mencabut akses akun Anda sendiri.");
+
+      // Snapshot semua membership target di seluruh restoran (service role).
+      // Diurutkan agar audit deterministik bila target punya lebih dari satu baris.
+      const { data: targetRows, error: targetErr } = await admin
+        .from("memberships")
+        .select("restaurant_id, role, branch_id")
+        .eq("user_id", userId)
+        .order("branch_id", { ascending: true, nullsFirst: false })
+        .order("role", { ascending: true });
+      if (targetErr) throw new HttpError(500, "Gagal memeriksa data pengguna.");
+      if (!targetRows || targetRows.length === 0) {
+        throw new HttpError(404, "Pengguna bukan staf di restoran mana pun.");
+      }
+
+      if (targetRows.some((m) => m.role === "owner")) {
+        throw new HttpError(403, "Akun pemilik utama tidak dapat dicabut aksesnya.");
+      }
+      if (targetRows.some((m) => m.restaurant_id !== restaurantId)) {
+        throw new HttpError(403, "Pengguna juga terdaftar di restoran lain. Hubungi pemilik restoran tersebut.");
+      }
+      if (callerRole === "branch_admin") {
+        const inScope = targetRows.every(
+          (m) => (m.role === "cashier" || m.role === "kitchen") && m.branch_id === callerBranchId,
+        );
+        if (!inScope) {
+          throw new HttpError(403, "Admin cabang hanya dapat mencabut akses kasir/dapur di cabangnya sendiri.");
+        }
+      }
+
+      const { data: targetAuth, error: authErr } = await admin.auth.admin.getUserById(userId);
+      if (authErr || !targetAuth?.user) throw new HttpError(404, "Akun pengguna tidak ditemukan.");
+      const oldEmail = targetAuth.user.email ?? "(tanpa email)";
+      const { data: profile } = await admin.from("profiles").select("full_name").eq("id", userId).maybeSingle();
+      const fullName = typeof profile?.full_name === "string" && profile.full_name ? profile.full_name : oldEmail;
+      const roleList = Array.from(new Set(targetRows.map((m) => String(m.role)))).join("/");
+      const branchTarget = targetRows[0]?.branch_id ?? null;
+
+      // Urutan disengaja: tukar email DULU (bila gagal, tidak ada yang berubah dan
+      // tindakan bisa diulang dengan bersih), baru hapus membership. Bila hapus gagal
+      // setelah email tertukar, coba pulihkan email lama; bila pemulihan juga gagal,
+      // audit dicatat sebagai 'error' — membership masih ada sehingga tindakan tetap
+      // bisa diulang.
+      const placeholderEmail =
+        "nonaktif." + crypto.randomUUID().replaceAll("-", "") + "@nnorte-removed.local";
+      const { error: emailErr } = await admin.auth.admin.updateUserById(userId, {
+        email: placeholderEmail,
+        email_confirm: true,
+      });
+      if (emailErr) throw new HttpError(500, "Gagal menukar email akun: " + emailErr.message);
+
+      const { error: delErr } = await admin
+        .from("memberships")
+        .delete()
+        .eq("user_id", userId)
+        .eq("restaurant_id", restaurantId);
+      if (delErr) {
+        await audit(branchTarget, "CABUT_AKUN", `${fullName} ${oldEmail} (${roleList})`, "error");
+        const { error: restoreErr } = await admin.auth.admin.updateUserById(userId, {
+          email: oldEmail,
+          email_confirm: true,
+        });
+        if (restoreErr) {
+          throw new HttpError(500, "Gagal menghapus hak akses dan email akun sementaranya tertukar. Coba pilih staf ini sekali lagi.");
+        }
+        throw new HttpError(500, "Gagal menghapus hak akses: " + delErr.message);
+      }
+
+      await audit(branchTarget, "CABUT_AKUN", `${fullName} ${oldEmail} (${roleList})`);
       return json(req, 200, { ok: true });
     }
 

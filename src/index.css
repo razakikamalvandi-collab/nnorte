@@ -378,18 +378,45 @@ body {
   pointer-events: none;
 }
 
+
 /* Inputs & selects theme-aware */
 input.theme-input,
 select.theme-input,
 textarea.theme-input {
-  background: var(--c-input);
+  background-color: var(--c-input) !important;
   border: 1px solid var(--c-border);
-  color: var(--c-text);
+  color: var(--c-text) !important;
   padding: 0.5rem 0.75rem;
   border-radius: 0.5rem;
   font-size: 0.875rem;
-  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s,
+    background 0.2s;
 }
+
+/* Dropdown mengikuti tema gelap */
+:root select.theme-input {
+  color-scheme: dark;
+}
+
+/* Dropdown mengikuti tema terang */
+:root[data-theme='light'] select.theme-input {
+  color-scheme: light;
+}
+
+/* Warna pilihan di dalam dropdown */
+select.theme-input option {
+  background-color: var(--c-surface);
+  color: var(--c-text);
+}
+
+/* Placeholder kategori */
+select.theme-input option[value=""] {
+  color: var(--c-subtle);
+}
+
+/* Efek fokus */
 input.theme-input:focus,
 select.theme-input:focus,
 textarea.theme-input:focus {
@@ -405,9 +432,15 @@ textarea.theme-input:focus {
   border-radius: var(--radius-xl);
   transition: border-color 0.3s, background 0.3s;
 }
+
 .card:hover {
-  border-color: color-mix(in srgb, var(--c-blue) 40%, var(--c-border));
+  border-color: color-mix(
+    in srgb,
+    var(--c-blue) 40%,
+    var(--c-border)
+  );
 }
+
 
 /* Table */
 .table-theme {

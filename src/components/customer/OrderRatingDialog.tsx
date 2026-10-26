@@ -24,6 +24,8 @@ interface OrderRatingDialogProps {
   orderReview?: string | null;
   /** Simpan rating ke database. Harus melempar error bila gagal. */
   onSubmit: (ratings: RatingSubmit[]) => Promise<void>;
+  /** Dipanggil saat pengguna menekan "Tambah pesanan lain" di layar terimakasih. */
+  onDone?: () => void;
   onClose: () => void;
 }
 
@@ -84,6 +86,7 @@ export function OrderRatingDialog({
   orderRating = null,
   orderReview = null,
   onSubmit,
+  onDone,
   onClose,
 }: OrderRatingDialogProps) {
   const titleId = useId();
@@ -107,6 +110,7 @@ export function OrderRatingDialog({
   const hasItemSelection = unrated.some((target) => (itemRatings[target.orderItemId] ?? 0) > 0);
   const remainingItemCount = unrated.filter((target) => (itemRatings[target.orderItemId] ?? 0) === 0).length;
   const canSubmit = !busy && !success && !nothingToRate && (overallSaved ? hasItemSelection : overall > 0);
+  const thankYouStars = overallSaved ? (orderRating ?? 0) : overall;
 
   // Fokus awal + kembalikan fokus saat dialog ditutup.
   useEffect(() => {
@@ -223,10 +227,30 @@ export function OrderRatingDialog({
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-nnorte-success/15 text-nnorte-success">
                 <Check size={28} aria-hidden="true" />
               </div>
-              <h3 className="mt-3 text-base font-bold text-nnorte-text">Rating terkirim</h3>
+              <div
+                className="mt-3 flex items-center justify-center gap-0.5"
+                role="img"
+                aria-label={`Rating keseluruhan ${thankYouStars} dari 5 bintang`}
+              >
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Star
+                    key={star}
+                    size={26}
+                    aria-hidden="true"
+                    className={star <= thankYouStars ? 'fill-current text-nnorte-warning' : 'text-nnorte-subtle/50'}
+                  />
+                ))}
+              </div>
+              <h3 className="mt-3 text-base font-bold text-nnorte-text">Terimakasih sudah memesan</h3>
               <p className="mt-1 text-xs leading-relaxed text-nnorte-muted">
-                Terima kasih. Penilaian Anda membantu kami menjaga kualitas pesanan.
+                {thankYouStars > 0 ? `Rating ${thankYouStars}/5 terkirim. ` : 'Rating terkirim. '}
+                Penilaian Anda membantu kami menjaga kualitas pesanan.
               </p>
+              {onDone && (
+                <Button className="mt-4 w-full sm:w-auto" onClick={onDone}>
+                  Tambah pesanan lain
+                </Button>
+              )}
             </div>
           ) : nothingToRate ? (
             <div className="py-6 text-center" role="status">

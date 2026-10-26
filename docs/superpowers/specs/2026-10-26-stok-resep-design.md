@@ -29,11 +29,11 @@
 1. Owner mengisi **Bahan per porsi** di form Master Katalog: nama, jumlah, satuan.
 2. Branch admin membuka **Stok & Bahan Baku**, menekan **Tambah Bahan**, memilih nama dari saran resep, mengisi satuan yang sama, stok awal, ambang minimum, dan harga satuan.
 3. Pelanggan membuat pesanan lewat `portal_create_order`.
-4. Di transaksi yang sama, `consume_order_ingredients(order_id)`:
-   - membaca `order_items` + `menu_ingredients`;
+4. Di transaksi yang sama (trigger `order_items_consume_ingredients` `after insert`), `consume_order_item_ingredients()`:
+   - membaca resep `menu_ingredients` untuk item tersebut;
    - mencari inventory cabang berdasarkan nama case-insensitive;
    - melewati bahan yang belum punya inventory;
-   - menolak bila satuan tidak cocok atau stok kurang;
+   - menolak bila satuan tidak cocok atau stok kurang (seluruh pesanan rollback);
    - mengurangi `current_stock` sebesar `quantity_per_portion × quantity` dan menulis ledger.
 5. Saat status pesanan diubah menjadi `cancelled`, trigger memanggil `restore_order_ingredients(order_id)` dan menandai baris ledger `restored_at`.
 
