@@ -49,6 +49,12 @@ type DbBranch = {
   deleted_at: string | null;
 };
 
+type DbMenuIngredient = {
+  name: string;
+  quantity: number | string;
+  unit: string;
+};
+
 type DbMenuItem = {
   id: string;
   sku: string;
@@ -62,6 +68,8 @@ type DbMenuItem = {
   is_spicy: boolean;
   preparation_time_minutes: number;
   variants: { name: string; options: string[] }[];
+  allergens: string[] | null;
+  menu_ingredients?: DbMenuIngredient[];
 };
 
 type DbMenuCategory = {
@@ -220,6 +228,14 @@ const mapMenuFromDB = (m: DbMenuItem): MasterMenuItem => ({
   isSpicy: m.is_spicy,
   preparationTimeMinutes: m.preparation_time_minutes,
   variants: m.variants,
+  ingredients: (m.menu_ingredients || [])
+    .map((ingredient) => ({
+      name: ingredient.name,
+      quantity: n(ingredient.quantity),
+      unit: ingredient.unit,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'id')),
+  allergens: m.allergens || [],
 });
 
 const mapBranchMenuFromDB = (bmi: DbBranchMenuItem): BranchMenuPricing => ({
@@ -357,6 +373,15 @@ export type BranchInput = Omit<Branch, 'id' | 'code'>;
 
 export type MenuInput = Omit<MasterMenuItem, 'id'>;
 
+export type InventoryInput = {
+  name: string;
+  category: string;
+  unit: string;
+  currentStock: number;
+  minThreshold: number;
+  costPerUnit: number;
+};
+
 const ORDERS_PAGE = 300;
 
 interface AppContextType {
@@ -421,6 +446,7 @@ interface AppContextType {
 
   // Inventory
   adjustStock: (id: string, amount: number, note: string) => Promise<void>;
+  addInventoryItem: (input: InventoryInput) => Promise<OpResult>;
 
   // Team
   setMemberStatus: (userId: string, status: 'active' | 'inactive') => Promise<OpResult>;
@@ -542,7 +568,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const [rest, br, menus, cats, bmi, tbl, inv, logs, team] = await Promise.all([
         supabase.from('restaurants').select('*').limit(1),
         supabase.from('branches').select('*').order('code'),
-        supabase.from('menu_items').select('*').order('name'),
+        supabase.from('menu_items').select('*, menu_ingredients(name, quantity, unit)').order('name'),
         supabase.from('menu_categories').select('name').order('name'),
         supabase.from('branch_menu_items').select('*'),
         supabase.from('dining_tables').select('*').order('table_number'),
@@ -810,6 +836,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (m.isSpicy !== undefined) out.is_spicy = m.isSpicy;
     if (m.preparationTimeMinutes !== undefined) out.preparation_time_minutes = m.preparationTimeMinutes;
     if (m.variants !== undefined) out.variants = m.variants;
+    if (m.allergens !== undefined) out.allergens = m.allergens;
     return out;
   };
 
@@ -843,6 +870,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .single();
     if (error) return fail(friendlyDbError(error.message));
 
+    const recipeRows = (item.ingredients || []).map((ingredient) => ({
+      restaurant_id: restaurantId,
+      menu_item_id: created.id,
+      name: ingredient.name.trim(),
+      quantity: ingredient.quantity,
+      unit: ingredient.unit.trim(),
+    }));
+    if (recipeRows.length > 0) {
+      const { error: recipeErr } = await supabase.from('menu_ingredients').insert(recipeRows);
+      if (recipeErr) {
+        await supabase.from('menu_items').delete().eq('id', created.id); // batalkan agar tidak setengah tersimpan
+        return fail(`Gagal menyimpan bahan menu: ${friendlyDbError(recipeErr.message)}`);
+      }
+    }
+
     // Harga awal tiap cabang = harga dasar; setelahnya harga cabang berdiri sendiri.
     if (branchIds.length > 0) {
       const rows = branchIds.map((branchId) => ({
@@ -868,8 +910,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateMasterMenu: AppContextType['updateMasterMenu'] = async (id, updates) => {
+    if (!restaurantId) return fail('Restoran tidak ditemukan.');
     const { error } = await supabase.from('menu_items').update(menuToDb(updates)).eq('id', id);
     if (error) return fail(friendlyDbError(error.message));
+
+    if (updates.ingredients !== undefined) {
+      const { error: deleteErr } = await supabase.from('menu_ingredients').delete().eq('menu_item_id', id);
+      if (deleteErr) return fail(friendlyDbError(deleteErr.message));
+
+      const recipeRows = updates.ingredients.map((ingredient) => ({
+        restaurant_id: restaurantId,
+        menu_item_id: id,
+        name: ingredient.name.trim(),
+        quantity: ingredient.quantity,
+        unit: ingredient.unit.trim(),
+      }));
+      if (recipeRows.length > 0) {
+        const { error: insertErr } = await supabase.from('menu_ingredients').insert(recipeRows);
+        if (insertErr) return fail(`Gagal menyimpan bahan menu: ${friendlyDbError(insertErr.message)}`);
+      }
+    }
+
     await fetchAllData();
     await addAuditLog('UPDATE_MENU_PUSAT', `Update menu ${updates.name || id}`, 'success', null);
     addToast('success', 'Master menu berhasil diperbarui.');
@@ -1092,6 +1153,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (ok) await addAuditLog('PENYESUAIAN_STOK', `${item.name} ${amount > 0 ? '+' : ''}${amount} (${note})`, 'success', item.branchId);
   };
 
+  const addInventoryItem: AppContextType['addInventoryItem'] = async (input) => {
+    if (!restaurantId || !currentUser?.branchId) return fail('Cabang aktif tidak ditemukan.');
+    const name = input.name.trim();
+    const unit = input.unit.trim();
+    const category = input.category.trim() || 'Bahan Baku';
+    if (!name) return fail('Nama bahan wajib diisi.');
+    if (name.length > 100) return fail('Nama bahan maksimal 100 karakter.');
+    if (!unit) return fail('Satuan wajib diisi.');
+    if (unit.length > 30) return fail('Satuan maksimal 30 karakter.');
+    if (![input.currentStock, input.minThreshold, input.costPerUnit].every((v) => Number.isFinite(v) && v >= 0)) {
+      return fail('Stok, ambang minimum, dan harga harus berupa angka 0 atau lebih.');
+    }
+    const duplicate = inventory.some(
+      (item) => item.branchId === currentUser.branchId && item.name.trim().toLowerCase() === name.toLowerCase()
+    );
+    if (duplicate) return fail('Bahan dengan nama ini sudah ada di cabang.');
+
+    const { error } = await supabase.from('inventory_items').insert({
+      restaurant_id: restaurantId,
+      branch_id: currentUser.branchId,
+      name,
+      category,
+      current_stock: input.currentStock,
+      unit,
+      min_threshold: input.minThreshold,
+      cost_per_unit: input.costPerUnit,
+      last_restocked_at: input.currentStock > 0 ? new Date().toISOString() : null,
+    });
+    if (error) return fail(friendlyDbError(error.message));
+
+    await fetchAllData();
+    await addAuditLog('TAMBAH_STOK', `${name} ${input.currentStock} ${unit}`, 'success', currentUser.branchId);
+    addToast('success', `Bahan ${name} ditambahkan.`);
+    return OK;
+  };
+
   // ---------------------------------------------------------------------------
   // Tim
   // ---------------------------------------------------------------------------
@@ -1193,6 +1290,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateOrderStatus,
     processPayment,
     adjustStock,
+    addInventoryItem,
     setMemberStatus,
     updateMemberAccess,
     updateSettings,

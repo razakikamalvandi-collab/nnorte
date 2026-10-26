@@ -8,14 +8,15 @@ import { Button } from '../../components/ui/Button';
 import { Field, inputClass } from '../../components/ui/Field';
 import { EmptyState, ErrorState } from '../../components/ui/States';
 import { ACCEPTED_IMAGE_TYPES, MAX_IMAGE_BYTES, removeMenuImageByPath, storagePathFromUrl, uploadMenuImage, validateImageFile } from '../../lib/menuImages';
+import { toRecipeIngredients, validateRecipeRows, type RecipeDraft } from '../../lib/recipes';
 
 const parseList = (v: string) => v.split(',').map((s) => s.trim()).filter(Boolean);
 
 interface FormState {
-  name: string; sku: string; category: string; description: string; ingredients: string; allergens: string;
+  name: string; sku: string; category: string; description: string; ingredients: RecipeDraft[]; allergens: string;
   basePrice: string; prepTime: string; isPopular: boolean;
 }
-const EMPTY: FormState = { name: '', sku: '', category: '', description: '', ingredients: '', allergens: '', basePrice: '', prepTime: '15', isPopular: false };
+const EMPTY: FormState = { name: '', sku: '', category: '', description: '', ingredients: [], allergens: '', basePrice: '', prepTime: '15', isPopular: false };
 
 export const MasterKatalogMenu: React.FC = () => {
   const { masterMenus, menuCategories, branches, branchMenus, currentUser, restaurantId, addMenuCategory, addMasterMenu, updateMasterMenu, setMasterMenuStatus, deleteMasterMenu, addToast, dataError, dataLoading, reloadData } = useApp();
@@ -70,7 +71,7 @@ export const MasterKatalogMenu: React.FC = () => {
 
   const openAdd = () => {
     setEditing(null);
-    setForm(EMPTY);
+    setForm({ ...EMPTY, ingredients: [] });
     setErrors({});
     setFormError(null);
     setTargets(branches.filter((b) => b.status === 'active').map((b) => b.id));
@@ -80,7 +81,12 @@ export const MasterKatalogMenu: React.FC = () => {
   const openEdit = (m: MasterMenuItem) => {
     setEditing(m);
     setForm({
-      name: m.name, sku: m.sku, category: categories.find((c) => c.toLowerCase() === m.category.trim().toLowerCase()) ?? m.category.trim(), description: m.description, ingredients: (m.ingredients ?? []).join(', '),
+      name: m.name, sku: m.sku, category: categories.find((c) => c.toLowerCase() === m.category.trim().toLowerCase()) ?? m.category.trim(), description: m.description,
+      ingredients: (m.ingredients ?? []).map((ingredient) => ({
+        name: ingredient.name,
+        quantity: String(ingredient.quantity),
+        unit: ingredient.unit,
+      })),
       allergens: (m.allergens ?? []).join(', '), basePrice: String(m.basePrice), prepTime: String(m.preparationTimeMinutes), isPopular: !!m.isPopular,
     });
     setErrors({});
@@ -89,6 +95,19 @@ export const MasterKatalogMenu: React.FC = () => {
     setOpen(true);
   };
   const close = () => { if (!saving) setOpen(false); };
+
+  const addRecipeRow = () => setForm((f) => ({
+    ...f,
+    ingredients: [...f.ingredients, { name: '', quantity: '1', unit: '' }],
+  }));
+  const updateRecipeRow = (index: number, patch: Partial<RecipeDraft>) => setForm((f) => ({
+    ...f,
+    ingredients: f.ingredients.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+  }));
+  const removeRecipeRow = (index: number) => setForm((f) => ({
+    ...f,
+    ingredients: f.ingredients.filter((_, i) => i !== index),
+  }));
 
   const openAddCategory = () => {
     setCategoryName('');
@@ -142,6 +161,8 @@ export const MasterKatalogMenu: React.FC = () => {
     if (form.basePrice === '' || !Number.isFinite(price) || price < 0) e.basePrice = 'Harga tidak valid.';
     const prep = Number(form.prepTime);
     if (!Number.isInteger(prep) || prep < 1 || prep > 240) e.prepTime = 'Isi 1–240 menit.';
+    const recipeError = validateRecipeRows(form.ingredients);
+    if (recipeError) e.ingredients = recipeError;
     setErrors((x) => ({ ...x, ...e, image: x.image }));
     return Object.keys(e).length === 0;
   };
@@ -159,7 +180,7 @@ export const MasterKatalogMenu: React.FC = () => {
       const image = uploaded ? uploaded.url : removeImage ? '' : oldUrl;
       const payload = {
         name: form.name, sku: form.sku, category: form.category.trim(), description: form.description,
-        ingredients: parseList(form.ingredients), allergens: parseList(form.allergens), basePrice: Number(form.basePrice),
+        ingredients: toRecipeIngredients(form.ingredients), allergens: parseList(form.allergens), basePrice: Number(form.basePrice),
         image, preparationTimeMinutes: Number(form.prepTime), isPopular: form.isPopular,
       };
       const res = editing ? await updateMasterMenu(editing.id, payload) : await addMasterMenu({ ...payload, status: 'active' }, targets);
@@ -254,7 +275,13 @@ export const MasterKatalogMenu: React.FC = () => {
                 <span className="text-[10px] font-bold uppercase tracking-wider text-nnorte-muted">{m.category || 'Tanpa kategori'}</span>
                 <h3 className="line-clamp-1 text-sm font-bold text-nnorte-text">{m.name}</h3>
                 <p className="line-clamp-2 text-[11px] leading-relaxed text-nnorte-muted">{m.description}</p>
-                <div className="mt-1 flex items-center gap-2 text-[10px] text-nnorte-muted"><span className="font-mono">{m.sku}</span><span className="flex items-center gap-1"><Clock size={10} aria-hidden="true" />{m.preparationTimeMinutes} mnt</span></div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-nnorte-muted">
+                  <span className="font-mono">{m.sku}</span>
+                  <span className="flex items-center gap-1"><Clock size={10} aria-hidden="true" />{m.preparationTimeMinutes} mnt</span>
+                  <span className={`flex items-center gap-1 ${(m.ingredients?.length ?? 0) === 0 ? 'text-nnorte-warning' : ''}`}>
+                    <Utensils size={10} aria-hidden="true" />{m.ingredients?.length ?? 0} bahan
+                  </span>
+                </div>
               </div>
               <div className="mt-auto space-y-2 border-t border-nnorte-border p-3">
                 {canEdit && (
@@ -331,7 +358,68 @@ export const MasterKatalogMenu: React.FC = () => {
           <Field label="Harga Dasar (Rp)" required error={errors.basePrice}><input type="number" min={0} step={500} inputMode="numeric" className={inputClass(!!errors.basePrice)} value={form.basePrice} onChange={(e) => set('basePrice', e.target.value)} /></Field>
           <Field label="Waktu Saji (menit)" error={errors.prepTime}><input type="number" min={1} max={240} className={inputClass(!!errors.prepTime)} value={form.prepTime} onChange={(e) => set('prepTime', e.target.value)} /></Field>
           <Field label="Deskripsi"><textarea rows={3} className={inputClass()} value={form.description} onChange={(e) => set('description', e.target.value)} maxLength={500} /></Field>
-          <Field label="Bahan (pisahkan dengan koma)"><input type="text" className={inputClass()} value={form.ingredients} onChange={(e) => set('ingredients', e.target.value)} /></Field>
+          <fieldset className="space-y-2 rounded-xl border border-nnorte-border p-3">
+            <legend className="px-1 text-xs font-semibold text-nnorte-text">Bahan per Porsi</legend>
+            <p className="text-[11px] leading-relaxed text-nnorte-muted">
+              Stok bahan di cabang berkurang sesuai takaran ini setiap 1 porsi terjual. Nama dan satuan harus sama dengan stok bahan di cabang.
+            </p>
+            {form.ingredients.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-nnorte-border p-3 text-center text-[11px] text-nnorte-muted">
+                Belum ada bahan. Menu tanpa resep tidak akan memotong stok.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {form.ingredients.map((row, index) => (
+                  <div key={index} className="grid grid-cols-[minmax(0,1fr)_4.5rem_4.5rem_auto] items-center gap-1.5">
+                    <input
+                      type="text"
+                      aria-label={`Nama bahan ${index + 1}`}
+                      placeholder="Nama bahan"
+                      className={inputClass()}
+                      value={row.name}
+                      onChange={(e) => updateRecipeRow(index, { name: e.target.value })}
+                      maxLength={100}
+                    />
+                    <input
+                      type="number"
+                      aria-label={`Jumlah bahan ${index + 1}`}
+                      placeholder="Qty"
+                      min={0.001}
+                      step={0.001}
+                      className={inputClass()}
+                      value={row.quantity}
+                      onChange={(e) => updateRecipeRow(index, { quantity: e.target.value })}
+                    />
+                    <input
+                      type="text"
+                      aria-label={`Satuan bahan ${index + 1}`}
+                      placeholder="Satuan"
+                      className={inputClass()}
+                      value={row.unit}
+                      onChange={(e) => updateRecipeRow(index, { unit: e.target.value })}
+                      maxLength={30}
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Hapus bahan ${index + 1}`}
+                      onClick={() => removeRecipeRow(index)}
+                      className="nn-press inline-flex min-h-10 min-w-10 cursor-pointer items-center justify-center rounded-lg border border-nnorte-border bg-nnorte-surface-2 text-nnorte-muted transition-colors hover:border-nnorte-red/50 hover:text-nnorte-red"
+                    >
+                      <X size={13} aria-hidden="true" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {errors.ingredients && <p role="alert" className="text-[11px] text-nnorte-error">{errors.ingredients}</p>}
+            <button
+              type="button"
+              onClick={addRecipeRow}
+              className="nn-press inline-flex min-h-9 cursor-pointer items-center gap-1 self-start rounded-lg border border-dashed border-nnorte-border px-2.5 py-1.5 text-[11px] font-semibold text-nnorte-muted transition-colors hover:border-nnorte-blue/50 hover:text-nnorte-text"
+            >
+              <Plus size={12} aria-hidden="true" /> Tambah bahan
+            </button>
+          </fieldset>
           <Field label="Alergen"><input type="text" className={inputClass()} value={form.allergens} onChange={(e) => set('allergens', e.target.value)} /></Field>
           <label className="flex min-h-11 cursor-pointer items-center gap-2 text-xs text-nnorte-text">
             <input type="checkbox" checked={form.isPopular} onChange={(e) => set('isPopular', e.target.checked)} className="h-5 w-5 accent-[var(--c-red)]" />

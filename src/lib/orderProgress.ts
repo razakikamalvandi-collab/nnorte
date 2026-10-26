@@ -18,5 +18,5 @@ export function toSceneStatus(status: string, paymentStatus: string): SceneStatu
 
 /** Kategori menu -> jenis item (untuk teks detail: "diracik barista" vs "dimasak dapur"). */
 export function isDrinkCategory(category?: string | null): 'food' | 'drink' {
-  return /minum|kopi|coffee|teh\b|tea\b|jus|juice|drink|beverage|susu|milk|smoothie|es\b/i.test(category ?? '') ? 'drink' : 'food';
+  return /minum|kopi|coffee|teh\b|tea\b|jus|juice|drink|beverage|susu|milk|smoothie|es\b|black/i.test(category ?? '') ? 'drink' : 'food';
 }

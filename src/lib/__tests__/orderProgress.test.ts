@@ -30,6 +30,7 @@ describe('isDrinkCategory', () => {
     expect(isDrinkCategory('Minuman Dingin')).toBe('drink');
     expect(isDrinkCategory('Tea')).toBe('drink');
     expect(isDrinkCategory('Jus Buah')).toBe('drink');
+    expect(isDrinkCategory('Black Series')).toBe('drink');
   });
 
   it('menganggap kategori lain sebagai makanan', () => {

@@ -105,6 +105,7 @@ export function OrderRatingDialog({
   const [success, setSuccess] = useState(false);
 
   const hasItemSelection = unrated.some((target) => (itemRatings[target.orderItemId] ?? 0) > 0);
+  const remainingItemCount = unrated.filter((target) => (itemRatings[target.orderItemId] ?? 0) === 0).length;
   const canSubmit = !busy && !success && !nothingToRate && (overallSaved ? hasItemSelection : overall > 0);
 
   // Fokus awal + kembalikan fokus saat dialog ditutup.
@@ -298,7 +299,7 @@ export function OrderRatingDialog({
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="text-xs font-bold text-nnorte-text">Rating item</h3>
                     <span className="text-[9px] font-semibold text-nnorte-muted">
-                      {unrated.length} belum dinilai
+                      {remainingItemCount} belum dinilai
                     </span>
                   </div>
                   <ul className="mt-2 space-y-2">
@@ -324,7 +325,7 @@ export function OrderRatingDialog({
                               <p className="truncate text-xs font-semibold text-nnorte-text">{target.name}</p>
                               <p className="mt-0.5 text-[10px] text-nnorte-muted">
                                 {target.qty ? `${target.qty}× · ` : ''}
-                                {saved ? 'Sudah dinilai' : 'Belum dinilai'}
+                                {saved ? 'Sudah dinilai' : value > 0 ? 'Akan dikirim' : 'Belum dinilai'}
                               </p>
                             </div>
                           </div>

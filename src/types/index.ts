@@ -54,6 +54,13 @@ export interface Branch {
   chartColor?: string;
 }
 
+export interface MenuIngredient {
+  name: string;
+  /** Takaran bahan untuk satu porsi menu. */
+  quantity: number;
+  unit: string;
+}
+
 export interface MasterMenuItem {
   id: string;
   sku: string;
@@ -66,7 +73,7 @@ export interface MasterMenuItem {
   isPopular?: boolean;
   isSpicy?: boolean;
   preparationTimeMinutes: number;
-  ingredients?: string[];
+  ingredients?: MenuIngredient[];
   allergens?: string[];
   variants?: {
     name: string; // e.g., 'Tingkat Kematangan'

@@ -36,6 +36,8 @@ const MESSAGES: Record<SceneStatus, string> = {
   payment_failed: 'Pembayaran gagal',
 };
 
+const CHIP_NAMES = ['Diterima', 'Dimasak', 'Siap', 'Diantar', 'Selesai'];
+
 function itemStatusLine(status: SceneStatus, kind: TrackItem['kind']): [string, boolean] {
   switch (status) {
     case 'pending_payment': return ['Menunggu pembayaran dikonfirmasi', false];
@@ -171,8 +173,8 @@ export function OrderFactory3D({
         </div>
       </header>
 
-      {stage >= 0 && STAGE_NAMES.map((n, i) => (
-        <div key={n} ref={(el) => { labelRefs.current[i] = el; }}
+      {stage >= 0 && CHIP_NAMES.map((n, i) => (
+        <div key={n} ref={(el) => { labelRefs.current[i] = el; }} title={STAGE_NAMES[i]}
           className={`nn-chip ${i === stage ? 'on' : i < stage ? 'done' : ''}`}>
           <b>{i < stage ? '✓' : i + 1}</b>{n}
         </div>
@@ -181,7 +183,13 @@ export function OrderFactory3D({
       <div className={`nn-status ${failed ? 'bad' : ''}`} role="status" aria-live="polite">
         <strong key={status}>{MESSAGES[status]}</strong>
         {stage >= 0 && <div className="nn-bar" aria-hidden="true"><i style={{ width: `${(stage / 4) * 100}%` }} /></div>}
-        {stage >= 0 && <small>{running ? '⚙ Mesin berjalan, pesanan sedang dipindahkan…' : `Tahap ${stage + 1} dari 5 · ${STAGE_NAMES[stage]}`}</small>}
+        {stage >= 0 && (
+          <small>
+            {running && status !== 'completed' && status !== 'cancelled'
+              ? '⚙ Mesin berjalan, pesanan sedang dipindahkan…'
+              : `Tahap ${stage + 1} dari 5 · ${STAGE_NAMES[stage]}`}
+          </small>
+        )}
         {orderRating != null && (
           <small className="nn-muted">Rating kamu: {'★'.repeat(orderRating)}{'☆'.repeat(5 - orderRating)}</small>
         )}
