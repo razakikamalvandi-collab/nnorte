@@ -1,0 +1,26 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" role="img" aria-labelledby="logo-title">
+  <title id="logo-title">NNORTE Coffee &amp; Hangout</title>
+  <circle cx="400" cy="400" r="385" fill="transparent"/>
+  <circle cx="400" cy="400" r="355" fill="none" stroke="#b6242d" stroke-width="5"/>
+  <path d="M163 294a242 242 0 0 1 474 0M181 294a224 224 0 0 1 438 0M198 294a207 207 0 0 1 404 0" fill="none" stroke="#b6242d" stroke-width="7"/>
+  <path d="M175 498a230 230 0 0 0 450 0M195 500a210 210 0 0 0 410 0M215 502a190 190 0 0 0 370 0" fill="none" stroke="#b6242d" stroke-width="7"/>
+  <g fill="none" stroke="#20244f" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M352 185c27-30-15-41 10-78m28 79c25-30-13-42 12-82m25 82c22-27-9-39 14-72" stroke-width="6"/>
+    <path d="m449 190 47-81m-31 87 53-73" stroke-width="9"/>
+    <path d="m491 118 8-13m12 26 9-13" stroke="#b6242d" stroke-width="7"/>
+    <path d="M281 245c6-43 53-64 119-64 67 0 113 21 119 64l-15 76c-8 38-47 63-104 63s-96-25-104-63z" fill="transparent" stroke-width="7"/>
+    <path d="M282 246c24 27 62 39 118 39s94-12 118-39" stroke-width="9"/>
+    <path d="M287 253c27 17 64 25 113 25s86-8 113-25" stroke="#b6242d" stroke-width="7"/>
+    <path d="M303 307c24 20 56 31 97 31s73-11 97-31m-165 14c17 27 39 44 68 52m68-52c-17 27-39 44-68 52" stroke-width="5"/>
+    <path d="M332 247c10-14 25-14 35 0 10-14 25-14 35 0m11 0c10-14 25-14 35 0m-139 0c10-14 25-14 35 0m-18 18c10-14 25-14 35 0m42 0c10-14 25-14 35 0m31 0c10-14 25-14 35 0" stroke-width="4"/>
+    <path d="M332 359c19 20 41 30 68 30s49-10 68-30" stroke-width="5"/>
+  </g>
+  <text x="388" y="455" text-anchor="middle" fill="#20244f" font-family="Arial,Helvetica,sans-serif" font-size="112" font-style="italic" font-weight="900" letter-spacing="-9">NNORTE</text>
+  <path d="m690 309 17 37 41 3-31 27 10 41-37-22-37 22 10-41-31-27 41-3z" fill="#20244f"/>
+  <circle cx="237" cy="523" r="8" fill="#20244f"/>
+  <circle cx="563" cy="523" r="8" fill="#20244f"/>
+  <defs><path id="tagline" d="M240 522a205 205 0 0 0 320 0"/></defs>
+  <text fill="#20244f" font-family="Georgia,serif" font-size="30" font-weight="700" letter-spacing="2">
+    <textPath href="#tagline" startOffset="50%" text-anchor="middle">COFFEE &amp; HANGOUT</textPath>
+  </text>
+</svg>

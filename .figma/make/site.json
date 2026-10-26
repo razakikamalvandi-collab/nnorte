@@ -1,0 +1,10 @@
+{
+  "description": "Comprehensive multi-branch restaurant management system offering role-based dashboards for owners, admins, cashiers, kitchen staff, and customers with secure ordering and analytics.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

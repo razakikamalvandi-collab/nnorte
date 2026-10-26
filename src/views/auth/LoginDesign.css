@@ -1,0 +1,35 @@
+/* NNORTE split-panel login design, adapted to the existing application auth flow. */
+.nn-login-shell { isolation: isolate; background: var(--c-bg, #101318); color: var(--c-text, #f5f5f7); }
+.nn-login-brand { position: relative; display: flex; flex: 1 1 52%; min-height: 100vh; overflow: hidden; padding: clamp(28px, 5vw, 72px); color: #fff; background: radial-gradient(ellipse at 25% 80%, rgba(22, 52, 112, .58), transparent 48%), linear-gradient(145deg, #11151c 0%, #151922 52%, #0d1016 100%); }
+.nn-brand-grid { position: absolute; inset: 0; opacity: .13; background-image: linear-gradient(rgba(255,255,255,.15) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.15) 1px, transparent 1px); background-size: 44px 44px; mask-image: linear-gradient(135deg, black, transparent 85%); }
+.nn-brand-orb { position: absolute; border-radius: 999px; filter: blur(70px); pointer-events: none; }
+.nn-brand-orb-red { width: 290px; height: 290px; top: 8%; right: -60px; background: rgba(227,29,54,.27); }
+.nn-brand-orb-blue { width: 300px; height: 300px; bottom: 3%; left: -100px; background: rgba(35,83,180,.26); }
+.nn-brand-content { position: relative; z-index: 1; display: flex; flex-direction: column; justify-content: center; max-width: 590px; width: 100%; margin: auto; }
+.nn-brand-mark { display: grid; place-items: center; width: 58px; height: 58px; margin-bottom: 23px; border: 1px solid rgba(255,95,112,.5); border-radius: 17px; background: linear-gradient(140deg,#e31d36,#85182a); box-shadow: 0 14px 38px rgba(227,29,54,.22); }
+.nn-brand-wordmark { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 16px; font-weight: 900; letter-spacing: .17em; }
+.nn-brand-wordmark span { padding: 6px 8px; border: 1px solid rgba(255,75,95,.34); border-radius: 5px; background: rgba(227,29,54,.12); color: #ff6678; font-size: 9px; letter-spacing: .13em; }
+.nn-brand-rule { width: 54px; height: 3px; margin: 34px 0 22px; background: #e31d36; }
+.nn-brand-content h2 { margin: 0; font-size: clamp(2.4rem, 4.3vw, 4.4rem); line-height: 1.07; letter-spacing: -.055em; font-weight: 800; }
+.nn-brand-content h2 em { color: #ff5268; font-style: normal; }
+.nn-brand-content p { max-width: 410px; margin: 23px 0 0; color: #aeb5c2; font-size: 14px; line-height: 1.85; }
+.nn-brand-stats { display: flex; gap: clamp(18px, 3vw, 42px); margin-top: 44px; padding-top: 22px; border-top: 1px solid rgba(255,255,255,.12); }
+.nn-brand-stats div { display: grid; gap: 6px; }
+.nn-brand-stats strong { font-size: 18px; letter-spacing: -.02em; }
+.nn-brand-stats span { color: #8e97a6; font-size: 11px; }
+.nn-brand-footer { position: absolute; z-index: 1; bottom: 24px; left: clamp(28px,5vw,72px); right: clamp(28px,5vw,72px); display: flex; justify-content: space-between; color: #687180; font-size: 9px; font-weight: 700; letter-spacing: .16em; }
+.nn-login-main { flex: 1 1 48%; min-width: 0; background: var(--c-bg, #101318); }
+.nn-login-form-wrap { animation: nnLoginIn .55s cubic-bezier(.2,.7,.2,1) both; }
+.nn-login-form-wrap > .text-center:first-child { margin-bottom: 26px; }
+.nn-login-form-wrap > .text-center:first-child > div:first-child { display: none; }
+.nn-login-form-wrap > .text-center:first-child h1 { font-size: 0; gap: 0; }
+.nn-login-form-wrap > .text-center:first-child h1::before { content: 'NNORTE'; font-size: 25px; letter-spacing: .16em; }
+.nn-login-form-wrap > .text-center:first-child h1 span { font-size: 9px; margin-left: 8px; }
+.nn-login-form-wrap > .text-center:first-child p { font-size: 12px; }
+.nn-login-form-wrap > div:nth-child(2) { border-radius: 18px; padding: clamp(22px,3vw,34px); box-shadow: 0 24px 80px rgba(0,0,0,.24); }
+.nn-login-form-wrap input:not([type=checkbox]) { min-height: 44px; font-size: 13px; }
+.nn-login-form-wrap form button[type=submit] { min-height: 45px; border-radius: 10px; box-shadow: 0 9px 22px rgba(227,29,54,.17); }
+.nn-login-form-wrap .absolute.right-4.top-4 { position: fixed; top: 20px; right: 22px; }
+@keyframes nnLoginIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 900px) { .nn-login-brand { flex-basis: 42%; padding: 30px; } .nn-login-main { flex-basis: 58%; } .nn-brand-content h2 { font-size: clamp(2rem,4vw,3rem); } .nn-brand-stats { flex-wrap: wrap; gap: 16px; } }
+@media (max-width: 680px) { .nn-login-shell { display: block; min-height: 100svh; } .nn-login-brand { display: none; } .nn-login-main { min-height: 100svh; padding: 76px 18px 28px; } .nn-login-form-wrap > .text-center:first-child { margin-bottom: 20px; } .nn-login-form-wrap > div:nth-child(2) { padding: 22px 18px; } .nn-login-form-wrap .absolute.right-4.top-4 { top: 14px; right: 14px; } }

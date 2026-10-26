@@ -1,0 +1,615 @@
+/* AUTO-DIBUAT dari login original (styles.css + animations.css), seluruh selector di-scope ke .nn-auth-root agar tidak memengaruhi halaman NNORTE lain. */
+/* =========================================================
+   NNORTE Coffee & Hangout — styles
+   Merah + biru navy, modern, premium, efek 3D, light/dark
+   ========================================================= */
+
+.nn-auth-root {
+  --red: #d7262d;
+  --red-2: #ef4b52;
+  --red-dark: #a51a20;
+  --navy: #27347a;
+  --navy-2: #1b2559;
+  --navy-deep: #0b1030;
+
+  --bg: #f4f5fb;
+  --bg-alt: #ebedf8;
+  --surface: #ffffff;
+  --surface-2: #f8f9fe;
+  --text: #121839;
+  --muted: #5a6188;
+  --accent: #27347a; /* warna aksen untuk teks/link */
+  --border: rgba(39, 52, 122, 0.16);
+  --input-bg: #ffffff;
+  --shadow-sm: 0 1px 2px rgba(18, 24, 57, 0.06), 0 4px 14px rgba(18, 24, 57, 0.06);
+  --shadow-lg: 0 2px 4px rgba(18, 24, 57, 0.05), 0 18px 40px -12px rgba(18, 24, 57, 0.28), 0 40px 80px -30px rgba(39, 52, 122, 0.35);
+  --focus: 0 0 0 4px rgba(215, 38, 45, 0.18);
+
+  --radius: 16px;
+  --radius-sm: 11px;
+  --font: 'Outfit', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Playfair Display', Georgia, serif;
+}
+
+:root[data-theme='dark'] .nn-auth-root {
+  --bg: #000000;
+  --bg-alt: #0b0b0e;
+  --surface: #101013;
+  --surface-2: #0b0b0e;
+  --text: #f3f3f7;
+  --muted: #a5a5b2;
+  --accent: #aab6ff;
+  --border: rgba(255, 255, 255, 0.14);
+  --input-bg: #070709;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5), 0 4px 14px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.5), 0 18px 40px -12px rgba(0, 0, 0, 0.85), 0 40px 80px -30px rgba(215, 38, 45, 0.22);
+  --focus: 0 0 0 4px rgba(239, 75, 82, 0.28);
+}
+
+.nn-auth-root, .nn-auth-root * { box-sizing: border-box; }
+.nn-auth-root {
+  margin: 0;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+.nn-auth-root img { max-width: 100%; display: block; }
+.nn-auth-root h1, .nn-auth-root h2, .nn-auth-root h3 { line-height: 1.15; margin: 0 0 0.5em; }
+.nn-auth-root p { margin: 0 0 1em; }
+.nn-auth-root code { font-size: 0.88em; background: rgba(127, 127, 160, 0.18); padding: 0.1em 0.4em; border-radius: 6px; }
+.nn-auth-root a { color: var(--accent); }
+.nn-auth-root :focus-visible { outline: 3px solid var(--red-2); outline-offset: 2px; }
+
+/* ---------- Transisi halaman ---------- */
+.nn-auth-root .page-transition { animation: nnauth-pageIn 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@keyframes nnauth-pageIn {
+  from { opacity: 0; transform: translateY(14px) scale(0.99); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------- Spinner / splash ---------- */
+.nn-auth-root .spinner {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2.5px solid rgba(255, 255, 255, 0.45); border-top-color: #fff;
+  display: inline-block; animation: nnauth-spin 0.7s linear infinite; flex: none;
+}
+.nn-auth-root .spinner-dark { border-color: rgba(39, 52, 122, 0.25); border-top-color: var(--navy); }
+.nn-auth-root .spinner-lg { width: 38px; height: 38px; border-width: 4px; border-color: var(--border); border-top-color: var(--red); }
+@keyframes nnauth-spin { to { transform: rotate(360deg); } }
+.nn-auth-root .splash { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 12px; color: var(--muted); }
+
+/* ---------- Brand ---------- */
+.nn-auth-root .brand { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
+.nn-auth-root .brand-logo {
+  width: 46px; height: 46px; border-radius: 50%; object-fit: cover; background: #fff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 4px 14px rgba(39, 52, 122, 0.3);
+}
+.nn-auth-root .brand-text { display: grid; line-height: 1.1; }
+.nn-auth-root .brand-text strong { font-weight: 800; font-style: italic; letter-spacing: -0.01em; font-size: 1.15rem; color: var(--accent); }
+.nn-auth-root .brand-text small { font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.nn-auth-root .brand-lg .brand-logo { width: 58px; height: 58px; }
+.nn-auth-root .brand-lg .brand-text strong { font-size: 1.4rem; }
+
+/* ---------- Tombol ---------- */
+.nn-auth-root .btn {
+  --lift: 0px;
+  font: inherit; font-weight: 600; font-size: 0.98rem;
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 0.8rem 1.4rem; border-radius: 12px; border: 1.5px solid transparent;
+  cursor: pointer; text-decoration: none; position: relative;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.nn-auth-root .btn:disabled { opacity: 0.7; cursor: not-allowed; }
+.nn-auth-root .btn-block { width: 100%; }
+.nn-auth-root .btn-sm { padding: 0.5rem 1rem; font-size: 0.9rem; border-radius: 10px; }
+.nn-auth-root .btn-lg { padding: 1rem 1.9rem; font-size: 1.05rem; border-radius: 14px; }
+
+.nn-auth-root .btn-primary {
+  color: #fff; background: linear-gradient(180deg, var(--red-2), var(--red));
+  box-shadow: 0 4px 0 var(--red-dark), 0 14px 24px -10px rgba(215, 38, 45, 0.6);
+}
+.nn-auth-root .btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 0 var(--red-dark), 0 20px 28px -10px rgba(215, 38, 45, 0.7); }
+.nn-auth-root .btn-primary:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--red-dark), 0 6px 12px -6px rgba(215, 38, 45, 0.6); }
+
+.nn-auth-root .btn-navy {
+  color: #fff; background: linear-gradient(180deg, #34439a, var(--navy));
+  box-shadow: 0 4px 0 var(--navy-deep), 0 14px 24px -10px rgba(39, 52, 122, 0.6);
+}
+.nn-auth-root .btn-navy:hover:not(:disabled) { transform: translateY(-2px); }
+.nn-auth-root .btn-navy:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--navy-deep); }
+
+.nn-auth-root .btn-outline { color: var(--accent); background: transparent; border-color: var(--accent); }
+.nn-auth-root .btn-outline:hover:not(:disabled) { background: var(--accent); color: var(--bg); transform: translateY(-2px); }
+.nn-auth-root .btn-ghost { color: var(--accent); background: transparent; border-color: var(--border); }
+.nn-auth-root .btn-ghost:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+.nn-auth-root .btn-google { background: #fff; color: #1f2347; border-color: #d9dbe8; box-shadow: var(--shadow-sm); }
+.nn-auth-root .btn-google:hover:not(:disabled) { transform: translateY(-2px); border-color: #b9bcd6; box-shadow: 0 8px 20px -8px rgba(18, 24, 57, 0.35); }
+
+.nn-auth-root .link-btn {
+  background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-color: transparent; transition: text-decoration-color 0.2s;
+}
+.nn-auth-root .link-btn:hover { text-decoration-color: currentColor; }
+.nn-auth-root .link-btn.strong { font-weight: 700; color: var(--red); }
+:root[data-theme='dark'] .nn-auth-root .link-btn.strong { color: var(--red-2); }
+
+/* ---------- Toggle tema ---------- */
+.nn-auth-root .theme-toggle { background: none; border: 0; padding: 4px; cursor: pointer; border-radius: 999px; }
+.nn-auth-root .theme-toggle-track {
+  display: block; width: 52px; height: 28px; border-radius: 999px; position: relative;
+  background: var(--bg-alt); border: 1.5px solid var(--border); transition: background 0.3s;
+}
+.nn-auth-root .theme-toggle-thumb {
+  position: absolute; top: 2px; left: 2px; width: 21px; height: 21px; border-radius: 50%;
+  display: grid; place-items: center; color: #fff;
+  background: linear-gradient(135deg, var(--red-2), var(--red));
+  box-shadow: 0 2px 6px rgba(215, 38, 45, 0.5); transition: transform 0.35s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+:root[data-theme='dark'] .nn-auth-root .theme-toggle-thumb { transform: translateX(24px); background: linear-gradient(135deg, #5468d8, var(--navy)); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5); }
+
+/* ---------- Form ---------- */
+.nn-auth-root .auth-form { display: grid; gap: 16px; }
+.nn-auth-root .form-head h2 { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.01em; margin-bottom: 6px; }
+.nn-auth-root .form-head p { color: var(--muted); margin: 0; }
+
+.nn-auth-root .field { display: grid; gap: 6px; }
+.nn-auth-root .field label { font-size: 0.88rem; font-weight: 600; color: var(--muted); transition: color 0.2s; }
+.nn-auth-root .field:focus-within label { color: var(--accent); }
+.nn-auth-root .field-control { position: relative; }
+.nn-auth-root .field-control input {
+  width: 100%; font: inherit; color: var(--text); background: var(--input-bg);
+  padding: 0.85rem 1rem; border-radius: var(--radius-sm); border: 1.5px solid var(--border);
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+.nn-auth-root .field-control input::placeholder { color: color-mix(in srgb, var(--muted) 70%, transparent); }
+.nn-auth-root .field-control input:focus { outline: none; border-color: var(--red); box-shadow: var(--focus); transform: translateY(-1px); }
+.nn-auth-root .field-control input[readonly] { opacity: 0.75; }
+.nn-auth-root .field-control input[type='password'], .nn-auth-root .field-control input[type='text'] { padding-right: 3rem; }
+.nn-auth-root .field.has-error input { border-color: var(--red); }
+.nn-auth-root .field-error { margin: 0; font-size: 0.84rem; color: var(--red); font-weight: 500; }
+:root[data-theme='dark'] .nn-auth-root .field-error { color: #ff8d92; }
+
+.nn-auth-root .eye-btn {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 38px; height: 38px; display: grid; place-items: center;
+  background: none; border: 0; border-radius: 9px; color: var(--muted); cursor: pointer;
+}
+.nn-auth-root .eye-btn:hover { color: var(--accent); background: var(--bg-alt); }
+
+.nn-auth-root .form-row-end { display: flex; justify-content: flex-end; margin-top: -6px; font-size: 0.9rem; }
+.nn-auth-root .switch-text { text-align: center; color: var(--muted); margin: 4px 0 0; font-size: 0.95rem; }
+
+.nn-auth-root .divider { display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: 0.85rem; }
+.nn-auth-root .divider::before, .nn-auth-root .divider::after { content: ''; height: 1px; flex: 1; background: var(--border); }
+
+.nn-auth-root .alert { padding: 0.8rem 1rem; border-radius: var(--radius-sm); font-size: 0.92rem; border: 1px solid; animation: nnauth-pageIn 0.3s both; }
+.nn-auth-root .alert-error { background: rgba(215, 38, 45, 0.09); border-color: rgba(215, 38, 45, 0.4); color: #8c1218; }
+.nn-auth-root .alert-success { background: rgba(26, 140, 84, 0.1); border-color: rgba(26, 140, 84, 0.4); color: #0d6b3c; }
+.nn-auth-root .alert-warn { background: rgba(230, 160, 20, 0.12); border-color: rgba(230, 160, 20, 0.5); color: #7a5200; margin-bottom: 18px; }
+:root[data-theme='dark'] .nn-auth-root .alert-error { color: #ffb3b6; }
+:root[data-theme='dark'] .nn-auth-root .alert-success { color: #8de0b6; }
+:root[data-theme='dark'] .nn-auth-root .alert-warn { color: #ffd98a; }
+
+.nn-auth-root .auth-done { text-align: center; justify-items: center; }
+.nn-auth-root .auth-done h2 { margin: 0; font-size: 1.6rem; }
+.nn-auth-root .auth-done p { color: var(--muted); margin: 0; }
+.nn-auth-root .done-icon {
+  width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center; color: #fff;
+  background: linear-gradient(135deg, var(--red-2), var(--navy)); box-shadow: 0 12px 30px -10px rgba(215, 38, 45, 0.6);
+  animation: nnauth-pop 0.6s cubic-bezier(0.3, 1.5, 0.5, 1) both;
+}
+@keyframes nnauth-pop { from { transform: scale(0.3) rotate(-20deg); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ---------- Panel flip 3D ---------- */
+.nn-auth-root .flip-perspective { perspective: 1400px; width: 100%; max-width: 440px; margin: 0 auto; }
+.nn-auth-root .flip-card {
+  position: relative; transform-style: preserve-3d; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 22px; padding: 34px 32px;
+  box-shadow: var(--shadow-lg); transition: transform 0.21s ease-in, background 0.3s;
+}
+.nn-auth-root .flip-card::after {
+  content: ''; position: absolute; left: 22px; right: 22px; bottom: 0; height: 4px; border-radius: 0 0 22px 22px;
+  background: linear-gradient(90deg, var(--red), var(--navy));
+}
+.nn-auth-root .flip-card.phase-out { transform: rotateY(90deg); }
+.nn-auth-root .flip-card.phase-in { animation: nnauth-flipIn 0.25s ease-out both; }
+@keyframes nnauth-flipIn { from { transform: rotateY(-90deg); } to { transform: rotateY(0); } }
+
+/* ---------- Topbar / Home ---------- */
+.nn-auth-root .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px clamp(18px, 5vw, 56px); }
+.nn-auth-root .topbar-actions { display: flex; align-items: center; gap: 10px; }
+
+.nn-auth-root .eyebrow { text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.78rem; font-weight: 700; color: var(--red); margin-bottom: 14px; }
+.nn-auth-root .eyebrow-light { color: #ff9a9f; }
+.nn-auth-root .lead { font-size: 1.12rem; color: var(--muted); max-width: 52ch; }
+
+.nn-auth-root .hero {
+  display: grid; grid-template-columns: 1.05fr 1fr; align-items: start; gap: 40px;
+  padding: clamp(10px, 4vw, 40px) clamp(18px, 5vw, 56px) 40px; max-width: 1280px; margin: 0 auto;
+}
+.nn-auth-root .hero h1 { font-family: var(--font-display); font-size: clamp(2.3rem, 5.2vw, 4.1rem); font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.4em; }
+.nn-auth-root .hero h1 em { font-style: italic; color: var(--red); }
+.nn-auth-root .hero-cta { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 28px; }
+.nn-auth-root .hero-side { display: flex; justify-content: center; padding-top: 2.1rem; /* sejajar dengan judul (setelah eyebrow) */ }
+.nn-auth-root .hero-login {
+  width: 100%; max-width: 440px; padding: 24px 24px 20px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow-lg); position: relative; overflow: hidden;
+}
+.nn-auth-root .hero-login::before { content: ''; position: absolute; left: 0; top: 0; right: 0; height: 4px; background: linear-gradient(90deg, var(--red), var(--navy)); }
+.nn-auth-root .hero-login-title { font-size: 1.25rem; font-weight: 800; margin: 0 0 14px; }
+.nn-auth-root .hero-login .auth-form { gap: 14px; }
+.nn-auth-root .hero-login .switch-text { margin-top: 2px; padding-top: 14px; border-top: 1px solid var(--border); }
+.nn-auth-root .hero-login .switch-text .link-btn.strong { font-size: 1.02rem; }
+
+.nn-auth-root .spaces { padding: 30px clamp(18px, 5vw, 56px) 70px; max-width: 1280px; margin: 0 auto; }
+.nn-auth-root .section-head h2 { font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 800; }
+.nn-auth-root .space-grid { list-style: none; padding: 0; margin: 28px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 18px; }
+.nn-auth-root .space-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px;
+  box-shadow: var(--shadow-sm); transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s;
+  animation: nnauth-pageIn 0.6s calc(var(--i, 0) * 80ms) both;
+  position: relative; overflow: hidden;
+}
+.nn-auth-root .space-card::after { content: ''; position: absolute; left: 0; top: 0; height: 4px; width: 100%; background: linear-gradient(90deg, var(--red), var(--navy)); transform: scaleX(0.25); transform-origin: left; transition: transform 0.4s ease; }
+.nn-auth-root .space-card:hover { transform: perspective(700px) translateY(-6px) rotateX(3deg); box-shadow: var(--shadow-lg); border-color: var(--red); }
+.nn-auth-root .space-card:hover::after { transform: scaleX(1); }
+.nn-auth-root .space-num { font-family: var(--font-display); font-size: 2.2rem; font-weight: 700; color: var(--red); opacity: 0.85; display: block; line-height: 1; margin-bottom: 14px; }
+.nn-auth-root .space-card h3 { font-size: 1.2rem; font-weight: 700; }
+.nn-auth-root .space-card p { color: var(--muted); margin: 0; font-size: 0.95rem; }
+.nn-auth-root .footer { text-align: center; padding: 26px; color: var(--muted); border-top: 1px solid var(--border); font-size: 0.9rem; }
+.nn-auth-root .footer p { margin: 0; }
+
+/* =========================================================
+   Scene 3D kafe (CSS 3D murni)
+   ========================================================= */
+.nn-auth-root .scene { position: relative; height: 470px; display: grid; place-items: center; --scale: 1; }
+.nn-auth-root .scene-compact { height: 300px; --scale: 0.62; }
+.nn-auth-root .scene-glow {
+  position: absolute; inset: 6% 8%; border-radius: 50%; filter: blur(46px); opacity: 0.5;
+  background: radial-gradient(circle at 30% 40%, rgba(215, 38, 45, 0.55), transparent 60%), radial-gradient(circle at 72% 60%, rgba(39, 52, 122, 0.7), transparent 62%);
+}
+.nn-auth-root .scene-float { position: relative; display: grid; place-items: center; width: 100%; height: 100%; perspective: 1500px; scale: var(--scale); animation: nnauth-float 7s ease-in-out infinite; }
+@keyframes nnauth-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+.nn-auth-root .stage {
+  width: 0; height: 0; position: relative; transform-style: preserve-3d;
+  transform: translateY(20px) rotateX(calc(-17deg + var(--py, 0) * -5deg)) rotateY(calc(-34deg + var(--px, 0) * 16deg));
+  transition: transform 0.25s ease-out;
+}
+
+.nn-auth-root .box { position: absolute; left: 0; top: 0; width: var(--w); height: var(--h); margin-left: calc(var(--w) / -2); margin-top: calc(var(--h) / -2); transform-style: preserve-3d; --cf: #f4efe8; --cs: #e4ddd1; --ct: #27347a; }
+.nn-auth-root .box > .f { position: absolute; left: 0; top: 0; backface-visibility: hidden; background: var(--cs); }
+.nn-auth-root .box > .f.front { width: var(--w); height: var(--h); background: var(--cf); transform: translateZ(calc(var(--d) / 2)); transform-style: preserve-3d; }
+.nn-auth-root .box > .f.back { width: var(--w); height: var(--h); transform: rotateY(180deg) translateZ(calc(var(--d) / 2)); }
+.nn-auth-root .box > .f.right { width: var(--d); height: var(--h); left: calc((var(--w) - var(--d)) / 2); transform: rotateY(90deg) translateZ(calc(var(--w) / 2)); filter: brightness(0.82); }
+.nn-auth-root .box > .f.left { width: var(--d); height: var(--h); left: calc((var(--w) - var(--d)) / 2); transform: rotateY(-90deg) translateZ(calc(var(--w) / 2)); }
+.nn-auth-root .box > .f.top { width: var(--w); height: var(--d); top: calc((var(--h) - var(--d)) / 2); background: var(--ct); transform: rotateX(90deg) translateZ(calc(var(--h) / 2)); }
+.nn-auth-root .box > .f.bottom { width: var(--w); height: var(--d); top: calc((var(--h) - var(--d)) / 2); transform: rotateX(-90deg) translateZ(calc(var(--h) / 2)); }
+
+.nn-auth-root .ground { --cf: #b8bbd6; --cs: #a3a7c8; --ct: #dfe1f0; }
+.nn-auth-root .ground > .f.top { background: repeating-linear-gradient(0deg, transparent 0 39px, rgba(39, 52, 122, 0.08) 39px 40px), repeating-linear-gradient(90deg, transparent 0 39px, rgba(39, 52, 122, 0.08) 39px 40px), var(--ct); }
+:root[data-theme='dark'] .nn-auth-root .ground { --cf: #1a2260; --cs: #141b52; --ct: #232c78; }
+:root[data-theme='dark'] .nn-auth-root .ground > .f.top { background: repeating-linear-gradient(0deg, transparent 0 39px, rgba(255, 255, 255, 0.07) 39px 40px), repeating-linear-gradient(90deg, transparent 0 39px, rgba(255, 255, 255, 0.07) 39px 40px), var(--ct); }
+
+.nn-auth-root .building { --cf: #f6f1ea; --cs: #e6dfd3; --ct: #27347a; }
+.nn-auth-root .building > .f.front { overflow: visible; }
+.nn-auth-root .facade-band { position: absolute; left: 0; top: 0; width: 100%; height: 26px; background: var(--navy); }
+.nn-auth-root .awning {
+  position: absolute; left: 8px; top: 44px; width: 224px; height: 38px; transform-origin: top center; transform: rotateX(62deg);
+  background: repeating-linear-gradient(90deg, #d7262d 0 28px, #ffffff 28px 56px); box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
+}
+.nn-auth-root .win { position: absolute; display: grid; grid-template: 1fr 1fr / 1fr 1fr; gap: 3px; padding: 3px; background: var(--navy); border-radius: 3px; box-shadow: 0 0 24px 2px rgba(255, 196, 104, 0.45); }
+.nn-auth-root .win span { background: linear-gradient(160deg, #fff3cf, #ffc468); }
+.nn-auth-root .win.w1 { left: 18px; top: 92px; width: 78px; height: 66px; }
+.nn-auth-root .win.w2 { right: 18px; top: 92px; width: 78px; height: 66px; }
+.nn-auth-root .win.sw1 { left: 20px; top: 62px; width: 52px; height: 74px; }
+.nn-auth-root .win.sw2 { left: 98px; top: 62px; width: 52px; height: 74px; }
+.nn-auth-root .door { position: absolute; left: 50%; bottom: 0; width: 46px; height: 84px; margin-left: -23px; background: var(--navy); border-radius: 4px 4px 0 0; padding: 5px 5px 0; }
+.nn-auth-root .door span { display: block; height: 100%; background: linear-gradient(170deg, #fff3cf, #ffb858); border-radius: 2px 2px 0 0; }
+.nn-auth-root .glass-wall { position: absolute; inset: 40px 18px 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 3px; background: var(--navy); }
+.nn-auth-root .glass-wall span { background: linear-gradient(160deg, #d4e2ff, #7f95e8); }
+.nn-auth-root .roof-lines { width: 100%; height: 100%; background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.1) 0 2px, transparent 2px 16px); }
+
+.nn-auth-root .roof { --cf: #1b2559; --cs: #151d47; --ct: #34439a; }
+.nn-auth-root .signboard { --cf: #27347a; --cs: #1b2559; --ct: #34439a; }
+.nn-auth-root .sign-text { height: 100%; display: flex; align-items: center; justify-content: center; gap: 4px; color: #fff; font-weight: 800; font-style: italic; font-size: 23px; letter-spacing: -0.02em; background: linear-gradient(180deg, #34439a, #27347a); border-bottom: 3px solid var(--red); }
+.nn-auth-root .sign-text i { color: var(--red-2); font-style: normal; font-size: 18px; transform: translateY(-3px); }
+
+.nn-auth-root .stool { --cf: #d7262d; --cs: #b31d24; --ct: #ef4b52; }
+.nn-auth-root .stool.navy { --cf: #27347a; --cs: #1b2559; --ct: #4458b4; }
+.nn-auth-root .table { --cf: #f1ece5; --cs: #ddd5c9; --ct: #fbf8f3; }
+.nn-auth-root .pole { --cf: #1b2559; --cs: #1b2559; --ct: #1b2559; }
+.nn-auth-root .lamp { --cf: #fff3c4; --cs: #ffe9a0; --ct: #fff8dc; }
+.nn-auth-root .lamp > .f { box-shadow: 0 0 22px 8px rgba(255, 200, 100, 0.6); }
+
+/* ---------- Auth page ---------- */
+.nn-auth-root .auth-page { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.nn-auth-root .auth-brand {
+  position: relative; overflow: hidden; padding: 0; background: var(--bg);
+}
+.nn-auth-root .auth-brand { position: sticky; top: 0; height: 100vh; }
+.nn-auth-root .auth-brand-body { padding-top: 5vh; }
+.nn-auth-root .auth-brand-body h1 { font-family: var(--font-display); font-size: clamp(2rem, 3.4vw, 3rem); font-weight: 700; letter-spacing: -0.01em; }
+.nn-auth-root .auth-brand .lead { color: rgba(255, 255, 255, 0.78); }
+.nn-auth-root .auth-points { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 10px; color: rgba(255, 255, 255, 0.9); }
+.nn-auth-root .auth-points li { padding-left: 28px; position: relative; }
+.nn-auth-root .auth-points li::before { content: ''; position: absolute; left: 0; top: 0.5em; width: 14px; height: 14px; border-radius: 4px; background: var(--red-2); transform: rotate(45deg) scale(0.75); box-shadow: 0 0 0 3px rgba(239, 75, 82, 0.28); }
+.nn-auth-root .auth-brand-scene { position: absolute; inset: 0; margin: 0; }
+.nn-auth-root .auth-brand-top { position: absolute; top: 24px; left: clamp(20px, 3vw, 40px); z-index: 3; }
+
+.nn-auth-root .auth-panel { display: grid; grid-template-rows: auto 1fr; padding: 22px clamp(24px, 5vw, 80px) 40px; background: var(--bg); position: relative; min-height: 100vh; }
+/* Form memenuhi setengah layar: tanpa kartu, garis tepi, atau bayangan */
+.nn-auth-root .auth-panel .flip-perspective { max-width: 600px; }
+.nn-auth-root .auth-panel .flip-card { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; }
+.nn-auth-root .auth-panel .flip-card::after { display: none; }
+.nn-auth-root .auth-panel .hero-login-title { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.01em; margin: 0 0 18px; }
+.nn-auth-root .auth-panel .auth-form { gap: 18px; }
+.nn-auth-root .auth-panel .switch-text { margin-top: 4px; padding-top: 18px; border-top: 1px solid var(--border); }
+.nn-auth-root .auth-panel .switch-text .link-btn.strong { font-size: 1.05rem; }
+.nn-auth-root .auth-panel-top { display: flex; justify-content: flex-end; align-items: center; }
+.nn-auth-root .auth-panel-body { display: grid; align-content: center; justify-items: center; padding-top: 10px; }
+.nn-auth-root .auth-panel-body > .flip-perspective, .nn-auth-root .auth-panel-body > .alert { width: 100%; }
+.nn-auth-root .auth-panel-body > .alert { width: 100%; max-width: 440px; margin: 0 auto 18px; }
+
+.nn-auth-root .center-page { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; }
+.nn-auth-root .center-card { align-self: center; justify-self: center; width: min(440px, calc(100% - 36px)); margin-bottom: 8vh; background: var(--surface); border: 1px solid var(--border); border-radius: 22px; padding: 34px 32px; box-shadow: var(--shadow-lg); }
+.nn-auth-root .center-card h2 { font-size: 1.6rem; margin-bottom: 6px; }
+.nn-auth-root .center-card p { color: var(--muted); }
+
+/* ---------- Dashboard ---------- */
+.nn-auth-root .dash { min-height: 100vh; display: grid; grid-template-columns: 270px minmax(0, 1fr); }
+.nn-auth-root .dash-side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 26px; padding: 24px 18px; background: linear-gradient(180deg, var(--navy) 0%, var(--navy-2) 60%, var(--navy-deep) 100%); color: #fff; }
+.nn-auth-root .dash-side .brand-text strong { color: #fff; }
+.nn-auth-root .dash-side .brand-text small { color: rgba(255, 255, 255, 0.65); }
+.nn-auth-root .dash-nav { display: grid; gap: 6px; }
+.nn-auth-root .dash-link {
+  display: flex; align-items: center; gap: 12px; width: 100%; font: inherit; font-weight: 500; text-align: left; cursor: pointer;
+  padding: 0.75rem 0.9rem; border-radius: 12px; border: 0; color: rgba(255, 255, 255, 0.8); background: transparent;
+  transition: background 0.2s, color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+.nn-auth-root .dash-link:hover { background: rgba(255, 255, 255, 0.1); color: #fff; transform: translateX(3px); }
+.nn-auth-root .dash-link.active { color: #fff; background: linear-gradient(135deg, var(--red-2), var(--red)); box-shadow: 0 8px 18px -8px rgba(215, 38, 45, 0.8); }
+.nn-auth-root .dash-side-foot { margin-top: auto; border-top: 1px solid rgba(255, 255, 255, 0.14); padding-top: 14px; }
+.nn-auth-root .dash-link.logout:hover { background: rgba(215, 38, 45, 0.28); }
+
+.nn-auth-root .dash-main { min-width: 0; display: flex; flex-direction: column; }
+.nn-auth-root .dash-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px clamp(18px, 3vw, 40px); border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 5; }
+.nn-auth-root .dash-user { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.nn-auth-root .dash-user div { display: grid; line-height: 1.2; min-width: 0; }
+.nn-auth-root .dash-user small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nn-auth-root .avatar { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; flex: none; }
+.nn-auth-root .avatar-fallback { display: grid; place-items: center; font-weight: 800; color: #fff; background: linear-gradient(135deg, var(--red-2), var(--navy)); }
+.nn-auth-root .dash-content { padding: clamp(18px, 3vw, 40px); display: grid; gap: 22px; align-content: start; animation: nnauth-pageIn 0.45s both; }
+.nn-auth-root .tab-title { font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 800; margin: 0; }
+
+.nn-auth-root .welcome-card {
+  display: flex; justify-content: space-between; align-items: center; gap: 20px; color: #fff; border-radius: 22px; padding: clamp(22px, 3vw, 36px); overflow: hidden; position: relative;
+  background: radial-gradient(500px 240px at 90% 0%, rgba(215, 38, 45, 0.55), transparent 65%), linear-gradient(135deg, var(--navy), var(--navy-deep));
+  box-shadow: var(--shadow-lg);
+}
+.nn-auth-root .welcome-card h1 { font-family: var(--font-display); font-size: clamp(1.8rem, 3.4vw, 2.6rem); margin-bottom: 4px; }
+.nn-auth-root .welcome-card .lead { color: rgba(255, 255, 255, 0.8); margin: 0; }
+.nn-auth-root .welcome-card .avatar { width: 72px; height: 72px; font-size: 1.8rem; box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.25); }
+
+.nn-auth-root .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+.nn-auth-root .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow-sm); transition: transform 0.3s, box-shadow 0.3s; }
+.nn-auth-root .panel:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+.nn-auth-root .panel h3 { font-size: 1.15rem; font-weight: 700; margin-bottom: 14px; }
+.nn-auth-root .muted { color: var(--muted); }
+.nn-auth-root .stack { display: grid; gap: 12px; margin-top: 16px; }
+.nn-auth-root .info-list { margin: 0; display: grid; gap: 12px; }
+.nn-auth-root .info-list div { display: flex; justify-content: space-between; gap: 14px; border-bottom: 1px dashed var(--border); padding-bottom: 10px; }
+.nn-auth-root .info-list div:last-child { border-bottom: 0; padding-bottom: 0; }
+.nn-auth-root .info-list dt { color: var(--muted); }
+.nn-auth-root .info-list dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.nn-auth-root .space-grid-dash { margin-top: 8px; }
+
+.nn-auth-root .empty-state { display: grid; justify-items: center; text-align: center; gap: 10px; padding: clamp(28px, 5vw, 56px) 20px; border: 2px dashed var(--border); border-radius: 20px; background: var(--surface); }
+.nn-auth-root .empty-state h3 { margin: 6px 0 0; font-size: 1.3rem; }
+.nn-auth-root .empty-state p { max-width: 46ch; color: var(--muted); margin: 0 0 10px; }
+.nn-auth-root .empty-icon { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, var(--red-2), var(--navy)); transform: rotate(-6deg); box-shadow: 0 12px 26px -10px rgba(39, 52, 122, 0.6); animation: nnauth-float 6s ease-in-out infinite; }
+.nn-auth-root .empty-icon svg { width: 28px; height: 28px; }
+
+/* ---------- Responsif ---------- */
+@media (max-width: 960px) {
+  .nn-auth-root .hero { grid-template-columns: 1fr; text-align: left; gap: 24px; }
+  .nn-auth-root .hero-side { padding-top: 0; justify-content: flex-start; }
+  .nn-auth-root .scene { height: 380px; --scale: 0.85; }
+  .nn-auth-root .auth-page { grid-template-columns: 1fr; }
+  .nn-auth-root .auth-brand { position: relative; height: 58vh; min-height: 380px; top: auto; }
+  .nn-auth-root .auth-panel { padding-top: 16px; min-height: 0; }
+
+  .nn-auth-root .dash { grid-template-columns: 1fr; }
+  .nn-auth-root .dash-side { position: static; height: auto; flex-direction: column; gap: 12px; padding: 14px 14px 10px; }
+  .nn-auth-root .dash-nav { grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; gap: 8px; padding-bottom: 6px; scrollbar-width: thin; }
+  .nn-auth-root .dash-link { width: auto; white-space: nowrap; padding: 0.6rem 0.9rem; }
+  .nn-auth-root .dash-link:hover { transform: none; }
+  .nn-auth-root .dash-side-foot { margin-top: 0; padding-top: 6px; }
+  .nn-auth-root .dash-side-foot .dash-link { width: 100%; }
+  .nn-auth-root .dash-top { position: static; }
+}
+@media (max-width: 520px) {
+  .nn-auth-root .flip-card, .nn-auth-root .center-card { padding: 26px 20px; border-radius: 18px; }
+  .nn-auth-root .scene { height: 320px; --scale: 0.68; }
+  .nn-auth-root .hero-cta .btn { flex: 1 1 100%; }
+  .nn-auth-root .welcome-card .avatar { display: none; }
+  .nn-auth-root .brand-text small { display: none; }
+}
+
+/* ---------- Aksesibilitas: kurangi gerak ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .nn-auth-root, .nn-auth-root *, .nn-auth-root *::before, .nn-auth-root *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  .nn-auth-root .stage { transform: translateY(20px) rotateX(-17deg) rotateY(-34deg) !important; }
+}
+
+/* ---------- Mode gelap: hitam (bukan biru navy) ---------- */
+:root[data-theme='dark'] .nn-auth-root .auth-brand {
+  background: radial-gradient(900px 500px at 10% 0%, rgba(215, 38, 45, 0.28), transparent 60%), linear-gradient(160deg, #0b0b0e 0%, #050506 55%, #000000 100%);
+}
+:root[data-theme='dark'] .nn-auth-root .dash-side {
+  background: linear-gradient(180deg, #0d0d10 0%, #050506 60%, #000000 100%);
+  border-right: 1px solid var(--border);
+}
+:root[data-theme='dark'] .nn-auth-root .welcome-card {
+  background: radial-gradient(500px 240px at 90% 0%, rgba(215, 38, 45, 0.45), transparent 65%), linear-gradient(135deg, #131316, #000000);
+  border: 1px solid var(--border);
+}
+:root[data-theme='dark'] .nn-auth-root .empty-icon,
+:root[data-theme='dark'] .nn-auth-root .avatar-fallback { background: linear-gradient(135deg, var(--red-2), #1c1c22); }
+
+/* =========================================================
+   NNORTE — animations.css
+   Tambahan animasi & efek 3D. Dimuat SETELAH styles.css dan
+   hanya menambah / menimpa efek visual (bukan layout/logika).
+   ========================================================= */
+
+/* ---------- Kanvas 3D kafe (React Three Fiber) ---------- */
+.nn-auth-root .cafe3d {
+  position: relative; width: 100%; height: 470px; overflow: hidden; isolation: isolate;
+  border-radius: 28px; border: 1px solid var(--border); box-shadow: var(--shadow-lg);
+}
+.nn-auth-root .cafe3d-compact { height: 300px; }
+.nn-auth-root .cafe3d-canvas { position: relative; z-index: 1; touch-action: pan-y; }
+.nn-auth-root .cafe3d-glow {
+  position: absolute; inset: 8% 6%; z-index: 0; border-radius: 50%; filter: blur(48px); opacity: 0.5; pointer-events: none;
+  background: radial-gradient(circle at 30% 40%, rgba(215, 38, 45, 0.5), transparent 60%), radial-gradient(circle at 72% 60%, rgba(39, 52, 122, 0.7), transparent 62%);
+}
+.nn-auth-root .cafe3d-loading { height: 470px; display: grid; place-items: center; }
+/* Mode isi: memenuhi seluruh setengah layar, tanpa bingkai */
+.nn-auth-root .cafe3d.cafe3d-fill, .nn-auth-root .cafe3d-loading.cafe3d-fill { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 0; box-shadow: none; }
+.nn-auth-root .cafe3d-fallback-fill { position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden; }
+.nn-auth-root .cafe3d-loading.cafe3d-compact { height: 300px; }
+
+@media (max-width: 960px) {
+  .nn-auth-root .cafe3d:not(.cafe3d-fill), .nn-auth-root .cafe3d-loading:not(.cafe3d-fill) { height: 380px; }
+  .nn-auth-root .cafe3d-compact:not(.cafe3d-fill), .nn-auth-root .cafe3d-loading.cafe3d-compact:not(.cafe3d-fill) { height: 300px; }
+}
+@media (max-width: 520px) {
+  .nn-auth-root .cafe3d:not(.cafe3d-fill), .nn-auth-root .cafe3d-loading:not(.cafe3d-fill) { height: 330px; }
+}
+
+/* ---------- Tilt 3D pada panel login/daftar ---------- */
+.nn-auth-root .tilt-panel {
+  --tilt-x: 0deg; --tilt-y: 0deg; --gx: 50%; --gy: 0%;
+  position: relative; width: 100%; max-width: 440px; margin: 0 auto;
+  transform: perspective(1400px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+  transition: transform 0.2s ease-out;
+}
+.nn-auth-root .tilt-panel > .flip-perspective { max-width: none; }
+.nn-auth-root .tilt-panel::after {
+  content: ''; position: absolute; inset: 0; border-radius: 22px; pointer-events: none; z-index: 2;
+  background: radial-gradient(420px circle at var(--gx) var(--gy), rgba(255, 255, 255, 0.16), transparent 60%);
+  opacity: 0; transition: opacity 0.3s ease; mix-blend-mode: soft-light;
+}
+.nn-auth-root .tilt-panel.is-tilting::after { opacity: 1; }
+.nn-auth-root .tilt-panel .flip-card { box-shadow: var(--shadow-lg), 0 30px 60px -30px rgba(215, 38, 45, 0.25); }
+
+/* ---------- Transisi rotateY + perspective login ⇄ daftar ---------- */
+.nn-auth-root .flip-perspective { perspective: 1600px; }
+.nn-auth-root .flip-card.phase-out {
+  transform: rotateY(90deg) translateZ(-60px) scale(0.96); opacity: 0.6;
+  transition: transform 0.21s cubic-bezier(0.5, 0, 0.9, 0.5), opacity 0.21s ease;
+}
+.nn-auth-root .flip-card.phase-in { animation: nnauth-flipIn3d 0.26s cubic-bezier(0.1, 0.7, 0.3, 1) both; }
+@keyframes nnauth-flipIn3d {
+  from { transform: rotateY(-90deg) translateZ(-60px) scale(0.96); opacity: 0.6; }
+  to { transform: none; opacity: 1; }
+}
+
+/* ---------- Hover 3D tombol (Masuk, Daftar Sekarang, dll.) ---------- */
+.nn-auth-root .btn-primary { overflow: hidden; }
+.nn-auth-root .btn-primary::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, 0.3) 48%, transparent 64%);
+  transform: translateX(-130%); transition: transform 0.7s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .nn-auth-root .btn:not(:disabled) { will-change: transform; }
+
+  .nn-auth-root .btn.btn-primary:hover:not(:disabled),
+  .nn-auth-root .btn.btn-navy:hover:not(:disabled),
+  .nn-auth-root .btn.btn-outline:hover:not(:disabled),
+  .nn-auth-root .btn.btn-ghost:hover:not(:disabled),
+  .nn-auth-root .btn.btn-google:hover:not(:disabled) {
+    transform: perspective(520px) translateY(-3px) translateZ(10px) rotateX(calc(var(--bty, 0) * -10deg)) rotateY(calc(var(--btx, 0) * 12deg));
+    transition: transform 0.09s linear, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  }
+  .nn-auth-root .btn.btn-primary:hover:not(:disabled) { box-shadow: 0 8px 0 var(--red-dark), 0 26px 34px -12px rgba(215, 38, 45, 0.75); }
+  .nn-auth-root .btn.btn-navy:hover:not(:disabled) { box-shadow: 0 8px 0 var(--navy-deep), 0 26px 34px -12px rgba(39, 52, 122, 0.75); }
+  .nn-auth-root .btn.btn-primary:hover:not(:disabled)::after { transform: translateX(130%); }
+
+  /* Tekan: tombol turun seperti tombol fisik */
+  .nn-auth-root .btn.btn-primary:active:not(:disabled),
+  .nn-auth-root .btn.btn-navy:active:not(:disabled),
+  .nn-auth-root .btn.btn-outline:active:not(:disabled),
+  .nn-auth-root .btn.btn-ghost:active:not(:disabled),
+  .nn-auth-root .btn.btn-google:active:not(:disabled) {
+    transform: perspective(520px) translateY(3px) translateZ(-2px);
+    transition-duration: 0.05s;
+  }
+}
+
+/* ---------- Kartu fasilitas: kedalaman saat hover ---------- */
+@media (hover: hover) and (pointer: fine) {
+  .nn-auth-root .space-card { transform-style: preserve-3d; }
+  .nn-auth-root .space-card:hover { transform: perspective(800px) translateY(-8px) translateZ(14px) rotateX(4deg); }
+}
+
+/* ---------- Aksesibilitas: kurangi gerak ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .nn-auth-root .tilt-panel { transform: none !important; transition: none; }
+  .nn-auth-root .tilt-panel::after { display: none; }
+  .nn-auth-root .btn.btn-primary:hover:not(:disabled),
+  .nn-auth-root .btn.btn-navy:hover:not(:disabled),
+  .nn-auth-root .btn.btn-outline:hover:not(:disabled),
+  .nn-auth-root .btn.btn-ghost:hover:not(:disabled),
+  .nn-auth-root .btn.btn-google:hover:not(:disabled) { transform: none !important; }
+  .nn-auth-root .btn-primary::after { display: none; }
+  .nn-auth-root .flip-card.phase-out { transform: none; }
+  .nn-auth-root .flip-card.phase-in { animation: none; }
+}
+
+/* ---------- Drag untuk memutar model 3D ---------- */
+.nn-auth-root .cafe3d-canvas canvas { cursor: grab; }
+.nn-auth-root .cafe3d-canvas canvas:active { cursor: grabbing; }
+.nn-auth-root .cafe3d-hint {
+  position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 2; pointer-events: none;
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; white-space: nowrap;
+  font-size: 0.8rem; font-weight: 600; color: var(--muted); background: var(--surface); border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm); animation: nnauth-hintPulse 2.6s ease-in-out infinite;
+}
+.nn-auth-root .cafe3d-hint span { color: var(--red); font-weight: 800; }
+@keyframes nnauth-hintPulse { 0%, 100% { opacity: 0.85; transform: translateX(-50%) translateY(0); } 50% { opacity: 1; transform: translateX(-50%) translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .nn-auth-root .cafe3d-hint { animation: none; } }
+
+/* ---------- Langit siang ⇄ malam ---------- */
+.nn-auth-root .cafe3d-sky { position: absolute; inset: 0; z-index: 0; pointer-events: none; transition: opacity 1s ease; }
+.nn-auth-root .cafe3d-sky-day { background: linear-gradient(180deg, #5db4f2 0%, #8fcdf7 55%, #c4e5fb 100%); opacity: 1; }
+.nn-auth-root .cafe3d-sky-night {
+  background: radial-gradient(80% 50% at 85% 0%, rgba(255, 255, 255, 0.035), transparent 60%), linear-gradient(180deg, #000000 0%, #020203 100%);
+  opacity: 0;
+}
+.nn-auth-root .cafe3d.is-night .cafe3d-sky-day { opacity: 0; }
+.nn-auth-root .cafe3d.is-night .cafe3d-sky-night { opacity: 1; }
+.nn-auth-root .cafe3d-loading { border-radius: 28px; border: 1px solid var(--border); background: var(--surface); }
+.nn-auth-root .cafe3d-compact { border-radius: 22px; }
+
+.nn-auth-root .cafe3d.is-night .cafe3d-hint { color: #c9d0f5; background: rgba(10, 10, 12, 0.85); border-color: rgba(255, 255, 255, 0.18); }
+
+/* ---------- Lencana "Buka 24 Jam" ---------- */
+.nn-auth-root .open-badge {
+  display: inline-flex; align-items: center; gap: 10px; margin: 22px 0 0; padding: 8px 18px 8px 14px;
+  border-radius: 999px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; font-size: 0.92rem;
+  color: var(--accent); background: var(--surface); border: 1.5px solid var(--red); box-shadow: var(--shadow-sm);
+}
+.nn-auth-root .open-dot { position: relative; width: 10px; height: 10px; border-radius: 50%; background: var(--red); flex: none; }
+.nn-auth-root .open-dot::after {
+  content: ''; position: absolute; inset: -5px; border-radius: 50%; border: 2px solid var(--red);
+  animation: nnauth-openPulse 1.8s ease-out infinite;
+}
+@keyframes nnauth-openPulse { from { transform: scale(0.5); opacity: 0.9; } to { transform: scale(1.5); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .nn-auth-root .open-dot::after { animation: none; opacity: 0.35; } }
