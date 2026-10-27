@@ -23,10 +23,18 @@ export const MenuHargaCabang: React.FC = () => {
   const [editingPriceItem, setEditingPriceItem] = useState<{ menuId: string; name: string; currentPrice: number } | null>(null);
   const [newPrice, setNewPrice] = useState(0);
 
+  // Tampilkan hanya menu aktif yang sudah didistribusikan ke cabang ini.
+  // Katalog pusat juga memuat salinan cabang dan menu arsip; menampilkan
+  // semuanya menyebabkan satu hidangan terlihat dua kali.
+  const branchMenuIds = new Set(
+    branchMenus.filter((item) => item.branchId === branchId).map((item) => item.menuId),
+  );
   const filteredMenus = masterMenus.filter(
-    (m) =>
-      m.name.toLowerCase().includes(search.toLowerCase()) ||
-      m.category.toLowerCase().includes(search.toLowerCase())
+    (menu) =>
+      menu.status === 'active' &&
+      branchMenuIds.has(menu.id) &&
+      (menu.name.toLowerCase().includes(search.toLowerCase()) ||
+        menu.category.toLowerCase().includes(search.toLowerCase())),
   );
 
   const handleSavePrice = (e: React.FormEvent) => {
