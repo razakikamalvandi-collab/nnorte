@@ -944,9 +944,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return OK;
     }
     if (currentUser?.role !== 'owner') return fail('Role Anda tidak dapat menambah menu.');
-    const effectiveBranchIds = currentUser?.role === 'branch_admin'
-      ? (currentUser.branchId ? [currentUser.branchId] : [])
-      : currentUser?.role === 'owner' ? branchIds : [];
+    const effectiveBranchIds = branchIds;
     if (effectiveBranchIds.length === 0) return fail('Cabang aktif tidak ditemukan untuk menambahkan menu.');
     const { data: created, error } = await supabase
       .from('menu_items')
@@ -989,9 +987,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     await fetchAllData();
-    const isBranchCreate = currentUser?.role === 'branch_admin';
-    await addAuditLog(isBranchCreate ? 'TAMBAH_MENU_CABANG' : 'TAMBAH_MENU_PUSAT', `Menu baru: ${created.name}`, 'success', isBranchCreate ? currentUser.branchId : null);
-    addToast('success', isBranchCreate ? `Menu ${created.name} ditambahkan ke cabang.` : `Menu ${created.name} ditambahkan ke katalog master.`);
+    await addAuditLog('TAMBAH_MENU_PUSAT', `Menu baru: ${created.name}`, 'success', null);
+    addToast('success', `Menu ${created.name} ditambahkan ke katalog master.`);
     return OK;
   };
 

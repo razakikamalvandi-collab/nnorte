@@ -236,6 +236,11 @@ export const INGREDIENT_DB: DbEntry[] = [
     allergens: ["Gandum"],
   },
   {
+    keys: ["crouton", "croutons"],
+    per100: n(407, 13, 72, 9, 6, 5, 700),
+    allergens: ["Gandum"],
+  },
+  {
     keys: ["kulit pangsit", "kulit dimsum", "kulit lumpia"],
     per100: n(290, 8, 55, 4, 2, 2, 500),
     allergens: ["Gandum"],
@@ -1080,18 +1085,6 @@ const TEMPLATES: RecipeTemplate[] = [
     ],
   },
   {
-    match: /\b(ayam bakar|grilled chicken)\b/,
-    items: [
-      ["Ayam", 180],
-      ["Kecap manis", 15],
-      ["Bawang putih", 5],
-      ["Bawang merah", 10],
-      ["Minyak goreng", 5],
-      ["Garam", 2],
-      ["Nasi putih", 180],
-    ],
-  },
-  {
     match: /\b(ayam goreng|fried chicken)\b/,
     items: [
       ["Ayam", 150],
@@ -1419,6 +1412,18 @@ const TEMPLATES: RecipeTemplate[] = [
       ["Nasi putih", 150],
       ["Sayuran", 60],
       ["Saus teriyaki", 20],
+    ],
+  },
+  {
+    match: /\b(ayam bakar|grilled chicken)\b/,
+    items: [
+      ["Ayam", 180],
+      ["Kecap manis", 15],
+      ["Bawang putih", 5],
+      ["Bawang merah", 10],
+      ["Minyak goreng", 5],
+      ["Garam", 2],
+      ["Nasi putih", 180],
     ],
   },
   {
