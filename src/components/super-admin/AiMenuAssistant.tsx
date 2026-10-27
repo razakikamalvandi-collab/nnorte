@@ -478,12 +478,12 @@ export default function AiMenuAssistant({
               Kategori menu
               {categories.length > 0 ? (
                 <select
-                  className={`${field} mt-1`}
+                  className={`${field} mt-1 bg-nnorte-input text-nnorte-text`}
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                 >
                   {categories.map((item) => (
-                    <option key={item} value={item}>
+                    <option key={item} value={item} className="bg-nnorte-surface text-nnorte-text">
                       {item}
                     </option>
                   ))}

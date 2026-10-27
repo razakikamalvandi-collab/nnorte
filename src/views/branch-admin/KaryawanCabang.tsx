@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { CheckCircle2, Mail, Phone, Trash2, Users, XCircle } from 'lucide-react';
+import { CheckCircle2, Mail, Pencil, Phone, Trash2, Users, XCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/ui/Button';
+import { Field, inputClass } from '../../components/ui/Field';
 import { EmptyState } from '../../components/ui/States';
-import { revokeStaffAccess } from '../../lib/adminUsers';
+import { revokeStaffAccess, updateStaffProfile, validatePhone } from '../../lib/adminUsers';
 import { canDeleteMember } from '../../lib/memberActions';
 import { TeamMember } from '../../types';
 
@@ -14,6 +15,7 @@ const ErrBox: React.FC<{ msg: string | null }> = ({ msg }) =>
   msg ? <p role="alert" className="rounded-lg border border-nnorte-error/40 bg-nnorte-error/10 p-2.5 text-xs text-nnorte-error">{msg}</p> : null;
 
 const revokeFormId = 'karyawan-revoke-form';
+const editFormId = 'karyawan-edit-form';
 
 export const KaryawanCabang: React.FC = () => {
   const { currentUser, branches, users, dataLoading, reloadData, addToast } = useApp();
@@ -24,15 +26,43 @@ export const KaryawanCabang: React.FC = () => {
   const [target, setTarget] = useState<TeamMember | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [mode, setMode] = useState<'edit' | 'revoke' | null>(null);
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
 
   const openRevoke = (u: TeamMember) => {
     setErr(null);
     setTarget(u);
+    setMode('revoke');
+  };
+  const openEdit = (u: TeamMember) => {
+    setErr(null);
+    setTarget(u);
+    setFullName(u.name);
+    setPhone(u.phone ?? '');
+    setMode('edit');
   };
   const close = () => {
     if (busy) return;
     setTarget(null);
+    setMode(null);
     setErr(null);
+  };
+  const submitEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busy || !target) return;
+    if (fullName.trim().length < 2 || fullName.trim().length > 80) return setErr('Nama harus 2-80 karakter.');
+    const phoneError = validatePhone(phone);
+    if (phoneError) return setErr(phoneError);
+    setBusy(true);
+    setErr(null);
+    const res = await updateStaffProfile(target.id, { fullName: fullName.trim(), phone: phone.trim() });
+    setBusy(false);
+    if (!res.ok) return setErr(res.error);
+    addToast('success', 'Profil karyawan diperbarui.');
+    setTarget(null);
+    setMode(null);
+    await reloadData();
   };
   const submitRevoke = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,6 +74,7 @@ export const KaryawanCabang: React.FC = () => {
     if (!res.ok) return setErr(res.error);
     addToast('success', `Akses ${target.name} dicabut. Email korporatnya bebas dipakai ulang.`);
     setTarget(null);
+    setMode(null);
     await reloadData();
   };
 
@@ -73,6 +104,9 @@ export const KaryawanCabang: React.FC = () => {
                     </div>
                   </div>
                   <span className="inline-flex shrink-0 items-center gap-1.5">
+                    {u.role !== 'owner' && u.role !== 'customer' && u.status === 'active' && (
+                      <button type="button" aria-label={`Edit karyawan ${u.name}`} title="Edit nama dan telepon" onClick={() => openEdit(u)} className="nn-press inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-nnorte-border bg-nnorte-surface-2 text-nnorte-muted hover:border-nnorte-blue/40 hover:text-nnorte-text"><Pencil size={13} /></button>
+                    )}
                     {revocable && (
                       <button type="button" aria-label={`Cabut akses ${u.name}`} title="Cabut akses permanen" onClick={() => openRevoke(u)} className="nn-press inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-nnorte-border bg-nnorte-surface-2 text-nnorte-muted hover:border-nnorte-red/60 hover:text-nnorte-red"><Trash2 size={13} /></button>
                     )}
@@ -93,7 +127,7 @@ export const KaryawanCabang: React.FC = () => {
       )}
 
       <Modal
-        isOpen={target !== null}
+        isOpen={target !== null && mode === 'revoke'}
         onClose={close}
         busy={busy}
         title={target ? `Cabut Akses: ${target.name}` : ''}
@@ -116,6 +150,33 @@ export const KaryawanCabang: React.FC = () => {
             <li>Email korporat <span className="font-mono text-nnorte-text">{target?.email}</span> bebas dipakai untuk akun baru.</li>
             <li>Riwayat tetap tersimpan.</li>
           </ul>
+        </form>
+      </Modal>
+      <Modal
+        isOpen={target !== null && mode === 'edit'}
+        onClose={close}
+        busy={busy}
+        title={target ? `Edit Karyawan: ${target.name}` : ''}
+        maxWidth="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={close} disabled={busy}>Batal</Button>
+            <Button type="submit" form={editFormId} loading={busy} loadingText="Menyimpan…">Simpan</Button>
+          </>
+        }
+      >
+        <form id={editFormId} onSubmit={submitEdit} noValidate className="flex flex-col gap-4">
+          <ErrBox msg={err} />
+          <Field label="Email" hint="Email korporat tidak dapat diubah.">
+            <input className={inputClass()} value={target?.email ?? ''} readOnly />
+          </Field>
+          <Field label="Nama Lengkap" required>
+            <input className={inputClass()} value={fullName} onChange={(e) => setFullName(e.target.value)} maxLength={80} required />
+          </Field>
+          <Field label="Nomor Telepon" required>
+            <input className={inputClass()} type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" maxLength={30} required />
+          </Field>
+          <p className="text-xs text-nnorte-muted">Role karyawan tetap {target ? ROLE_LABEL[target.role] : ''} dan cabang tidak dapat diubah oleh Admin Cabang.</p>
         </form>
       </Modal>
     </div>

@@ -1,8 +1,9 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Star, X } from 'lucide-react';
+import { Check, Star, X, BadgeCheck, Sparkles } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { MAX_RATING_REVIEW, type RatingSubmission } from '../../lib/ratings';
+import type { PortalCompensationVoucher } from '../../lib/portalApi';
 
 export type RatingSubmit = RatingSubmission;
 
@@ -23,7 +24,8 @@ interface OrderRatingDialogProps {
   orderRating?: number | null;
   orderReview?: string | null;
   /** Simpan rating ke database. Harus melempar error bila gagal. */
-  onSubmit: (ratings: RatingSubmit[]) => Promise<void>;
+  compensation?: PortalCompensationVoucher | null;
+  onSubmit: (ratings: RatingSubmit[]) => Promise<PortalCompensationVoucher | null>;
   /** Dipanggil saat pengguna menekan "Tambah pesanan lain" di layar terimakasih. */
   onDone?: () => void;
   onClose: () => void;
@@ -85,6 +87,7 @@ export function OrderRatingDialog({
   orderNumber,
   orderRating = null,
   orderReview = null,
+  compensation = null,
   onSubmit,
   onDone,
   onClose,
@@ -106,6 +109,7 @@ export function OrderRatingDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [issuedVoucher, setIssuedVoucher] = useState<PortalCompensationVoucher | null>(compensation);
 
   const hasItemSelection = unrated.some((target) => (itemRatings[target.orderItemId] ?? 0) > 0);
   const remainingItemCount = unrated.filter((target) => (itemRatings[target.orderItemId] ?? 0) === 0).length;
@@ -173,7 +177,8 @@ export function OrderRatingDialog({
       }
       if (payload.length === 0) throw new Error('Pilih minimal satu rating.');
 
-      await onSubmit(payload);
+      const voucher = await onSubmit(payload);
+      if (voucher) setIssuedVoucher(voucher);
       setSuccess(true);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Rating gagal dikirim. Coba lagi.');
@@ -223,12 +228,38 @@ export function OrderRatingDialog({
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5">
           {success ? (
-            <div className="py-6 text-center" role="status" aria-live="polite">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-nnorte-success/15 text-nnorte-success">
-                <Check size={28} aria-hidden="true" />
+            <div className="relative isolate -mx-5 -my-5 flex min-h-[min(680px,72dvh)] flex-col items-center overflow-hidden bg-nnorte-bg px-5 pb-5 pt-7 text-center sm:min-h-[min(720px,78dvh)] sm:px-8" role="status" aria-live="polite">
+              <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+                <span className="absolute -left-10 top-[38%] h-28 w-28 rounded-full border border-nnorte-border/70" />
+                <span className="absolute -right-12 top-[20%] h-36 w-36 rounded-full border border-nnorte-border/70" />
+                <span className="absolute bottom-24 right-0 h-px w-1/3 bg-nnorte-border" />
+                <span className="absolute bottom-16 right-0 h-px w-1/2 bg-nnorte-border/70" />
+                <Sparkles className="absolute left-[15%] top-[17%] h-4 w-4 text-nnorte-red/70" />
+                <Sparkles className="absolute right-[17%] top-[24%] h-3 w-3 text-nnorte-blue" />
+                <span className="absolute left-[22%] top-[28%] h-2 w-2 rounded-full bg-nnorte-red/70" />
+                <span className="absolute right-[22%] top-[34%] h-2 w-2 rounded-full bg-nnorte-blue/70" />
               </div>
+              <div className="relative mt-3 flex h-44 w-44 items-center justify-center sm:mt-5 sm:h-52 sm:w-52">
+                <div className="absolute inset-3 rounded-[2.5rem] bg-gradient-to-br from-nnorte-blue via-nnorte-red to-nnorte-red shadow-xl shadow-nnorte-blue/20" style={{ clipPath: 'polygon(50% 0%,61% 8%,75% 3%,82% 15%,96% 22%,92% 38%,100% 50%,92% 62%,96% 78%,82% 85%,75% 97%,61% 92%,50% 100%,39% 92%,25% 97%,18% 85%,4% 78%,8% 62%,0% 50%,8% 38%,4% 22%,18% 15%,25% 3%,39% 8%)' }} />
+                <div className="absolute inset-7 flex items-center justify-center rounded-full border-[5px] border-nnorte-blue/90 bg-nnorte-surface/80 shadow-inner">
+                  <BadgeCheck size={92} strokeWidth={1.6} className="text-nnorte-blue drop-shadow-md" aria-hidden="true" />
+                </div>
+                <div className="absolute -bottom-1 flex items-center gap-1" role="img" aria-label={`Rating keseluruhan ${thankYouStars} dari 5 bintang`}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star key={star} size={29} aria-hidden="true" className={`${star <= thankYouStars ? 'fill-current text-nnorte-warning' : 'fill-nnorte-surface text-nnorte-subtle/60'} drop-shadow-md`} />
+                  ))}
+                </div>
+              </div>
+              <h3 className="mt-12 max-w-sm text-3xl font-black leading-tight tracking-tight text-nnorte-text sm:mt-14 sm:text-4xl">Terimakasih<br />sudah memesan</h3>
+              <p className="mt-3 max-w-sm text-sm leading-relaxed text-nnorte-muted">
+                {thankYouStars > 0 ? `Rating ${thankYouStars}/5 terkirim. ` : 'Rating terkirim. '}
+                Penilaian Anda membantu kami menjaga kualitas pesanan.
+              </p>
+              {/* Spacer menempatkan tombol seperti kartu konfirmasi pada referensi. */}
+              <div className="min-h-8 flex-1" />
+              {/* Rating bintang yang dikirim tetap terlihat sebagai indikator. */}
               <div
-                className="mt-3 flex items-center justify-center gap-0.5"
+                className="sr-only"
                 role="img"
                 aria-label={`Rating keseluruhan ${thankYouStars} dari 5 bintang`}
               >
@@ -241,13 +272,21 @@ export function OrderRatingDialog({
                   />
                 ))}
               </div>
-              <h3 className="mt-3 text-base font-bold text-nnorte-text">Terimakasih sudah memesan</h3>
-              <p className="mt-1 text-xs leading-relaxed text-nnorte-muted">
-                {thankYouStars > 0 ? `Rating ${thankYouStars}/5 terkirim. ` : 'Rating terkirim. '}
-                Penilaian Anda membantu kami menjaga kualitas pesanan.
-              </p>
+              {thankYouStars > 0 && thankYouStars <= 2 && (
+                <div className="mx-auto mb-4 mt-4 w-full max-w-sm rounded-2xl border border-nnorte-red/30 bg-nnorte-red/10 p-4 text-left">
+                  <p className="text-sm font-bold text-nnorte-text">Maaf pengalaman Anda belum memuaskan.</p>
+                  <p className="mt-1 text-xs leading-relaxed text-nnorte-muted">Kami akan meninjau masukan Anda. Sebagai permintaan maaf, gunakan kompensasi ini untuk pesanan berikutnya di cabang yang sama.</p>
+                  {issuedVoucher ? (
+                    <div className="mt-3 rounded-xl border border-nnorte-border bg-nnorte-surface p-3 text-center">
+                      <p className="text-xs font-bold text-nnorte-success">Diskon {issuedVoucher.discountPercent}% · maks. {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(issuedVoucher.maxDiscount)}</p>
+                      <p className="mt-1 font-mono text-lg font-black tracking-wider text-nnorte-text">{issuedVoucher.code}</p>
+                      <p className="text-[10px] text-nnorte-muted">Berlaku sampai {new Date(issuedVoucher.expiresAt).toLocaleDateString('id-ID')}</p>
+                    </div>
+                  ) : <p className="mt-2 text-xs text-nnorte-muted">Kode kompensasi sedang disiapkan. Buka kembali rating pesanan ini untuk melihatnya.</p>}
+                </div>
+              )}
               {onDone && (
-                <Button className="mt-4 w-full sm:w-auto" onClick={onDone}>
+                <Button className="mt-2 w-full rounded-full bg-gradient-to-r from-nnorte-blue to-nnorte-red py-3 text-base font-black text-white shadow-lg hover:opacity-95 sm:w-full" onClick={onDone}>
                   Tambah pesanan lain
                 </Button>
               )}

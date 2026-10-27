@@ -126,6 +126,7 @@ type DbOrder = {
   customer_name: string;
   customer_phone: string | null;
   subtotal: number | string;
+  discount_amount?: number | string;
   tax_amount: number | string;
   service_charge_amount: number | string;
   total_amount: number | string;
@@ -300,6 +301,7 @@ const mapOrderFromDB = (
       notes: oi.notes || undefined,
     })),
     subtotal: n(o.subtotal),
+    discount: n(o.discount_amount),
     tax: n(o.tax_amount),
     serviceCharge: n(o.service_charge_amount),
     totalAmount: n(o.total_amount),
@@ -420,6 +422,7 @@ interface AppContextType {
   // Master Menu
   menuCategories: string[];
   addMenuCategory: (name: string) => Promise<OpResult>;
+  deleteMenuCategory: (name: string) => Promise<OpResult>;
   addMasterMenu: (item: MenuInput, branchIds: string[]) => Promise<OpResult>;
   updateMasterMenu: (id: string, updates: Partial<MenuInput>) => Promise<OpResult>;
   /** Arsipkan atau aktifkan kembali menu master tanpa menghapus datanya. */
@@ -442,6 +445,7 @@ interface AppContextType {
 
   // Orders & Lifecycle
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
+  createTakeawayOrder: (input: { customerName: string; customerPhone: string; items: { menuId: string; quantity: number; variantChoice?: string; notes?: string; addonIds: string[] }[] }) => Promise<OpResult>;
   processPayment: (orderId: string, method: PaymentMethod, cashTendered?: number) => Promise<OpResult>;
 
   // Inventory
@@ -569,7 +573,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         supabase.from('restaurants').select('*').limit(1),
         supabase.from('branches').select('*').order('code'),
         supabase.from('menu_items').select('*, menu_ingredients(name, quantity, unit)').order('name'),
-        supabase.from('menu_categories').select('name').order('name'),
+        currentUser?.role === 'branch_admin' && currentUser.branchId
+          ? supabase.from('branch_menu_categories').select('name').eq('branch_id', currentUser.branchId).order('name')
+          : supabase.from('menu_categories').select('name').order('name'),
         supabase.from('branch_menu_items').select('*'),
         supabase.from('dining_tables').select('*').order('table_number'),
         supabase.from('inventory_items').select('*').order('name'),
@@ -594,7 +600,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Cabang yang dipilih bisa saja baru dihapus admin lain.
       setCurrentBranchId((prev) => (prev === 'all' || mappedBranches.some((b) => b.id === prev) ? prev : 'all'));
       setMasterMenus(((collect('Menu', menus) as DbMenuItem[] | null) || []).map(mapMenuFromDB));
-      setMenuCategories(((collect('Kategori', cats) as DbMenuCategory[] | null) || []).map((c) => c.name));
+      const categoryRows = cats.error && currentUser?.role === 'branch_admin' &&
+        /branch_menu_categories|schema cache|could not find the table/i.test(cats.error.message)
+        ? []
+        : (collect('Kategori', cats) as DbMenuCategory[] | null) || [];
+      setMenuCategories(categoryRows.map((c) => c.name));
       setBranchMenus(((collect('Harga cabang', bmi) as DbBranchMenuItem[] | null) || []).map(mapBranchMenuFromDB));
       const mappedTables = ((collect('Meja', tbl) as DbTable[] | null) || []).map(mapTableFromDB);
       setTables(mappedTables);
@@ -623,7 +633,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
     }
-  }, [authUser, fetchOrders]);
+  }, [authUser, currentUser, fetchOrders]);
 
   // Muat saat login; kosongkan saat logout agar tidak ada sisa data pengguna sebelumnya.
   useEffect(() => {
@@ -762,6 +772,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const friendlyDbError = (message: string): string => {
+    if (/branch_admin_delete_menu_category/i.test(message)) {
+      return 'Fitur hapus kategori belum tersedia di database. Terapkan migrasi 202610270006_branch_category_delete_reassign.sql lalu muat ulang halaman.';
+    }
+    if (/branch_menu_categories|branch_admin_(add|delete)_menu_category|schema cache/i.test(message)) {
+      return 'Fitur kategori cabang belum tersedia di database. Terapkan migrasi 202610270004_branch_menu_categories.sql lalu muat ulang halaman.';
+    }
     if (message.includes('branches_restaurant_id_code_key')) return 'Kode cabang bentrok. Coba simpan ulang.';
     if (message.includes('menu_items_restaurant_id_sku_key')) return 'SKU sudah dipakai menu lain.';
     if (message.includes('row-level security')) return 'Anda tidak memiliki izin untuk tindakan ini.';
@@ -845,10 +861,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const name = rawName.trim();
     if (!name) return fail('Nama kategori wajib diisi.');
     if (name.length > 60) return fail('Nama kategori maksimal 60 karakter.');
-    const duplicate =
-      menuCategories.some((c) => c.toLowerCase() === name.toLowerCase()) ||
-      masterMenus.some((m) => m.category.trim().toLowerCase() === name.toLowerCase());
+    const duplicate = masterMenus.some((m) =>
+      (currentUser?.role !== 'branch_admin' || branchMenus.some((entry) => entry.branchId === currentUser.branchId && entry.menuId === m.id)) &&
+      m.category.trim().toLowerCase() === name.toLowerCase()
+    ) ||
+      menuCategories.some((c) => c.toLowerCase() === name.toLowerCase());
     if (duplicate) return fail('Kategori sudah ada.');
+
+    if (currentUser?.role === 'branch_admin' && currentUser.branchId) {
+      const { error } = await supabase.rpc('branch_admin_add_menu_category', {
+        p_branch: currentUser.branchId,
+        p_name: name,
+      });
+      if (error) return fail(error.code === '23505' ? 'Kategori sudah ada.' : friendlyDbError(error.message));
+      await fetchAllData();
+      await addAuditLog('TAMBAH_KATEGORI_CABANG', `Kategori menu: ${name}`, 'success', currentUser.branchId);
+      addToast('success', `Kategori ${name} ditambahkan untuk cabang ini.`);
+      return OK;
+    }
+    if (currentUser?.role !== 'owner') return fail('Role Anda tidak dapat menambah kategori.');
 
     const { error } = await supabase.from('menu_categories').insert({ restaurant_id: restaurantId, name });
     if (error) {
@@ -861,8 +892,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return OK;
   };
 
+  const deleteMenuCategory: AppContextType['deleteMenuCategory'] = async (rawName) => {
+    const name = rawName.trim();
+    if (!name) return fail('Kategori tidak valid.');
+    if (currentUser?.role === 'branch_admin' && currentUser.branchId) {
+      const { error } = await supabase.rpc('branch_admin_delete_menu_category', {
+        p_branch: currentUser.branchId,
+        p_name: name,
+      });
+      if (error) return fail(friendlyDbError(error.message));
+      await fetchAllData();
+      await addAuditLog('HAPUS_KATEGORI_CABANG', `Kategori menu: ${name}`, 'warning', currentUser.branchId);
+      addToast('success', `Kategori ${name} dihapus dari daftar cabang.`);
+      return OK;
+    }
+    if (currentUser?.role !== 'owner' || !restaurantId) return fail('Role Anda tidak dapat menghapus kategori.');
+    if (masterMenus.some((menu) => menu.category.trim().toLowerCase() === name.toLowerCase())) {
+      return fail('Kategori masih digunakan menu. Pindahkan menu ke kategori lain sebelum menghapusnya.');
+    }
+    const { error } = await supabase.from('menu_categories').delete().eq('restaurant_id', restaurantId).ilike('name', name);
+    if (error) return fail(friendlyDbError(error.message));
+    await fetchAllData();
+    await addAuditLog('HAPUS_KATEGORI', `Kategori menu: ${name}`, 'warning', null);
+    addToast('success', `Kategori ${name} dihapus.`);
+    return OK;
+  };
+
   const addMasterMenu: AppContextType['addMasterMenu'] = async (item, branchIds) => {
     if (!authUser || !restaurantId) return fail('Sesi atau restoran tidak ditemukan.');
+    if (currentUser?.role === 'branch_admin') {
+      if (!currentUser.branchId) return fail('Cabang aktif tidak ditemukan.');
+      const { data, error } = await supabase.rpc('branch_admin_create_menu', {
+        p_restaurant: restaurantId,
+        p_branch: currentUser.branchId,
+        p_sku: item.sku,
+        p_name: item.name,
+        p_category: item.category,
+        p_description: item.description,
+        p_base_price: item.basePrice,
+        p_preparation_minutes: item.preparationTimeMinutes,
+        p_is_popular: item.isPopular ?? false,
+        p_is_spicy: item.isSpicy ?? false,
+        p_variants: item.variants ?? [],
+        p_allergens: item.allergens ?? [],
+        p_ingredients: item.ingredients ?? [],
+      });
+      if (error) return fail(friendlyDbError(error.message));
+      await fetchAllData();
+      await addAuditLog('TAMBAH_MENU_CABANG', `Menu baru: ${item.name}`, 'success', currentUser.branchId);
+      addToast('success', `Menu ${item.name} ditambahkan ke katalog cabang.`);
+      return OK;
+    }
+    if (currentUser?.role !== 'owner') return fail('Role Anda tidak dapat menambah menu.');
+    const effectiveBranchIds = currentUser?.role === 'branch_admin'
+      ? (currentUser.branchId ? [currentUser.branchId] : [])
+      : currentUser?.role === 'owner' ? branchIds : [];
+    if (effectiveBranchIds.length === 0) return fail('Cabang aktif tidak ditemukan untuk menambahkan menu.');
     const { data: created, error } = await supabase
       .from('menu_items')
       .insert({ restaurant_id: restaurantId, ...menuToDb(item) })
@@ -886,8 +971,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // Harga awal tiap cabang = harga dasar; setelahnya harga cabang berdiri sendiri.
-    if (branchIds.length > 0) {
-      const rows = branchIds.map((branchId) => ({
+    if (effectiveBranchIds.length > 0) {
+      const rows = effectiveBranchIds.map((branchId) => ({
         restaurant_id: restaurantId,
         branch_id: branchId,
         menu_item_id: created.id,
@@ -904,13 +989,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     await fetchAllData();
-    await addAuditLog('TAMBAH_MENU_PUSAT', `Menu baru: ${created.name}`, 'success', null);
-    addToast('success', `Menu ${created.name} ditambahkan ke katalog master.`);
+    const isBranchCreate = currentUser?.role === 'branch_admin';
+    await addAuditLog(isBranchCreate ? 'TAMBAH_MENU_CABANG' : 'TAMBAH_MENU_PUSAT', `Menu baru: ${created.name}`, 'success', isBranchCreate ? currentUser.branchId : null);
+    addToast('success', isBranchCreate ? `Menu ${created.name} ditambahkan ke cabang.` : `Menu ${created.name} ditambahkan ke katalog master.`);
     return OK;
   };
 
   const updateMasterMenu: AppContextType['updateMasterMenu'] = async (id, updates) => {
     if (!restaurantId) return fail('Restoran tidak ditemukan.');
+    if (currentUser?.role === 'branch_admin' && currentUser.branchId) {
+      const menu = masterMenus.find((entry) => entry.id === id);
+      if (!menu) return fail('Menu tidak ditemukan di cabang ini.');
+      const payload = { ...menu, ...updates };
+      const { error } = await supabase.rpc('branch_admin_update_menu', {
+        p_restaurant: restaurantId,
+        p_branch: currentUser.branchId,
+        p_menu: id,
+        p_sku: payload.sku,
+        p_name: payload.name,
+        p_category: payload.category,
+        p_description: payload.description,
+        p_base_price: payload.basePrice,
+        p_preparation_minutes: payload.preparationTimeMinutes,
+        p_is_popular: payload.isPopular ?? false,
+        p_is_spicy: payload.isSpicy ?? false,
+        p_variants: payload.variants ?? [],
+        p_allergens: payload.allergens ?? [],
+        p_ingredients: payload.ingredients ?? [],
+      });
+      if (error) return fail(friendlyDbError(error.message));
+      await fetchAllData();
+      await addAuditLog('UBAH_MENU_CABANG', `Menu diubah: ${payload.name}`, 'success', currentUser.branchId);
+      addToast('success', `Menu ${payload.name} diperbarui untuk cabang ini.`);
+      return OK;
+    }
     const { error } = await supabase.from('menu_items').update(menuToDb(updates)).eq('id', id);
     if (error) return fail(friendlyDbError(error.message));
 
@@ -983,6 +1095,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteMasterMenu: AppContextType['deleteMasterMenu'] = async (id) => {
     const menu = masterMenus.find((m) => m.id === id);
+    if (currentUser?.role === 'branch_admin' && currentUser.branchId) {
+      const { error } = await supabase.rpc('branch_admin_remove_menu', {
+        p_branch: currentUser.branchId,
+        p_menu: id,
+      });
+      if (error) return fail(friendlyDbError(error.message));
+      await fetchAllData();
+      await addAuditLog('HAPUS_MENU_CABANG', `Menu dilepas dari cabang: ${menu?.name || id}`, 'warning', currentUser.branchId);
+      addToast('success', `${menu?.name || 'Menu'} dihapus dari katalog cabang ini.`);
+      return OK;
+    }
     const { count, error: countErr } = await supabase
       .from('order_items')
       .select('id', { count: 'exact', head: true })
@@ -1136,6 +1259,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return OK;
   };
 
+  const createTakeawayOrder: AppContextType['createTakeawayOrder'] = async (input) => {
+    if (!currentUser?.branchId) return fail('Cabang kasir tidak ditemukan.');
+    const items = input.items.filter((item) => Number.isInteger(item.quantity) && item.quantity > 0).map((item) => ({
+      menu_item_id: item.menuId,
+      quantity: item.quantity,
+      variant_choice: item.variantChoice || null,
+      notes: item.notes || null,
+      addons: item.addonIds.map((id) => ({ id })),
+    }));
+    if (!input.customerName.trim()) return fail('Nama pelanggan wajib diisi.');
+    if (items.length === 0) return fail('Pilih minimal satu menu.');
+    const { error } = await supabase.rpc('staff_create_takeaway_order', {
+      p_branch: currentUser.branchId,
+      p_customer: input.customerName.trim(),
+      p_phone: input.customerPhone.trim() || null,
+      p_items: items,
+    });
+    if (error) return fail(friendlyDbError(error.message));
+    await fetchAllData();
+    addToast('success', 'Pesanan takeaway berhasil dibuat dan dikirim ke antrean dapur.');
+    return OK;
+  };
+
   // ---------------------------------------------------------------------------
   // Stok
   // ---------------------------------------------------------------------------
@@ -1275,6 +1421,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     deleteBranch,
     menuCategories,
     addMenuCategory,
+    deleteMenuCategory,
     addMasterMenu,
     updateMasterMenu,
     setMasterMenuStatus,
@@ -1289,6 +1436,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateTableStatus,
     updateOrderStatus,
     processPayment,
+    createTakeawayOrder,
     adjustStock,
     addInventoryItem,
     setMemberStatus,

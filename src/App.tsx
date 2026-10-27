@@ -149,6 +149,10 @@ const MainAppContent: React.FC = () => {
     }
   } else if (currentUser.role === 'branch_admin') {
     switch (activeTab) {
+      case 'master_katalog':
+        renderedView = <MasterKatalogMenu />;
+        activeTabTitle = 'Master Katalog Menu';
+        break;
       case 'dashboard_cabang':
         renderedView = <DashboardCabang />;
         activeTabTitle = 'Dashboard Cabang';

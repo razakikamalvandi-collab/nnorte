@@ -40,7 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   setIsOpenMobile,
 }) => {
-  const { currentUser, logout, switchRole, branches, currentBranchId } = useApp();
+  const { currentUser, logout, branches } = useApp();
 
   if (!currentUser) return null;
 
@@ -67,6 +67,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       { id: 'dashboard_cabang', label: 'Dashboard Cabang', icon: LayoutDashboard },
       { id: 'pesanan_cabang', label: 'Pesanan Cabang', icon: Receipt },
       { id: 'meja_qr', label: 'Meja & QR Code', icon: QrCode },
+      { id: 'master_katalog', label: 'Master Katalog Menu', icon: UtensilsCrossed },
       { id: 'menu_harga_cabang', label: 'Menu & Harga Cabang', icon: Tags },
       { id: 'dapur_antrean', label: 'Dapur & Antrean', icon: ChefHat },
       { id: 'stok_bahan', label: 'Stok & Bahan Baku', icon: Package },
@@ -174,7 +175,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Quick link to customer ordering portal */}
           <div className="pt-4 mt-4 border-t border-nnorte-border/60">
             <button
-              onClick={() => switchRole('customer')}
+              onClick={() => {
+                const portalUrl = new URL(window.location.href);
+                portalUrl.searchParams.set('customer', '1');
+                if (currentUser.role === 'branch_admin' && currentUser.branchId) {
+                  portalUrl.searchParams.set('branch', currentUser.branchId);
+                } else {
+                  portalUrl.searchParams.delete('branch');
+                }
+                window.open(portalUrl.toString(), '_blank', 'noopener,noreferrer');
+              }}
               className="w-full flex items-center justify-between px-3.5 py-2 rounded-lg text-xs font-medium text-nnorte-muted hover:text-nnorte-text hover:bg-nnorte-surface-2 border border-nnorte-border/40 hover:border-nnorte-blue/40 transition-colors cursor-pointer"
             >
               <div className="flex items-center gap-2">

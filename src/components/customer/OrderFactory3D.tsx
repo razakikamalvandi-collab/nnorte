@@ -9,6 +9,7 @@ import {
   type SceneStatus,
 } from '../../lib/orderFactoryScene';
 import { OrderRatingDialog, type RatingSubmit } from './OrderRatingDialog';
+import type { PortalCompensationVoucher } from '../../lib/portalApi';
 
 /**
  * NNORTE - Live Order Progress (mesin 3D) untuk pelanggan.
@@ -63,8 +64,9 @@ export type OrderFactory3DProps = {
   orderRating?: number | null;
   /** Ulasan keseluruhan yang sudah tersimpan. */
   orderReview?: string | null;
+  compensation?: PortalCompensationVoucher | null;
   /** Simpan rating ke database. Harus melempar error bila gagal. */
-  onRate?: (ratings: RatingSubmit[]) => Promise<void>;
+  onRate?: (ratings: RatingSubmit[]) => Promise<PortalCompensationVoucher | null>;
   /** Dipanggil saat pengguna menekan "Tambah pesanan lain" di layar terimakasih. */
   onRateDone?: () => void;
 };
@@ -79,6 +81,7 @@ export function OrderFactory3D({
   className,
   orderRating = null,
   orderReview = null,
+  compensation = null,
   onRate,
   onRateDone,
 }: OrderFactory3DProps) {
@@ -225,6 +228,7 @@ export function OrderFactory3D({
           orderNumber={orderNumber}
           orderRating={orderRating}
           orderReview={orderReview}
+          compensation={compensation}
           onSubmit={onRate}
           onDone={
             onRateDone

@@ -66,3 +66,6 @@ export const resetUserPassword = (userId: string, newPassword: string) =>
 
 export const revokeStaffAccess = (userId: string) =>
   callAdmin<Record<string, never>>({ action: 'revoke_access', user_id: userId });
+
+export const updateStaffProfile = (userId: string, profile: { fullName: string; phone: string }) =>
+  callAdmin<Record<string, never>>({ action: 'update_profile', user_id: userId, full_name: profile.fullName, phone: profile.phone });

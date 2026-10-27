@@ -26,27 +26,37 @@ export default function AddToCartAnimation({
   const [isFlying, setIsFlying] = useState(false);
   const reduceMotion = useReducedMotion();
 
-  const pulseCart = async (cart: HTMLElement) => {
+  const shakeCart = async (cart: HTMLElement) => {
     const ripple = cart.querySelector<HTMLElement>(".nnorte-cart-ripple");
 
     await Promise.all([
       animate(
         cart,
-        { scale: [1, 1.18, 0.94, 1], rotate: [0, -5, 4, 0] },
-        { duration: 0.45, ease: "easeOut" },
+        {
+          x: [0, -5, 6, -5, 3, 0],
+          y: [0, -3, 2, -1, 1, 0],
+          rotate: [0, -6, 6, -4, 2, 0],
+          scale: [1, 1.08, 0.96, 1.04, 0.99, 1],
+        },
+        { duration: 0.48, ease: "easeOut" },
       ).finished,
       ripple
         ? animate(
             ripple,
-            { scale: [0.4, 1.8], opacity: [0.7, 0] },
+            { scale: [0.4, 2.2], opacity: [0.8, 0] },
             { duration: 0.5, ease: "easeOut" },
           ).finished
         : Promise.resolve(),
     ]);
 
-    // Bersihkan transform inline agar umpan balik tekan tombol tetap bekerja.
+    // Bersihkan transform dan ripple inline agar state berikutnya dimulai bersih.
     cart.style.removeProperty("transform");
+    cart.style.removeProperty("translate");
     cart.style.removeProperty("rotate");
+    if (ripple) {
+      ripple.style.removeProperty("transform");
+      ripple.style.removeProperty("opacity");
+    }
   };
 
   const handleAdd = async () => {
@@ -111,7 +121,8 @@ export default function AddToCartAnimation({
       // Keranjang langsung diperbarui; flyer hanya umpan balik visual.
       onAdd();
 
-      await animate(
+      const entryDuration = 0.72;
+      const flyIn = animate(
         flyer,
         {
           x: [0, deltaX * 0.55, deltaX],
@@ -121,12 +132,53 @@ export default function AddToCartAnimation({
           rotate: [0, -12, 15],
         },
         {
-          duration: 0.72,
+          duration: entryDuration,
           ease: [0.22, 0.61, 0.36, 1],
         },
       ).finished;
 
-      await pulseCart(cart);
+      // Mulai getaran tepat sebelum flyer tiba supaya puncaknya bertepatan
+      // dengan produk masuk ke keranjang.
+      const arrivalShake = new Promise<void>((resolve) => {
+        window.setTimeout(() => {
+          void shakeCart(cart).finally(resolve);
+        }, entryDuration * 1000 * 0.82);
+      });
+      await Promise.all([flyIn, arrivalShake]);
+
+      // Beri jeda singkat, lalu getarkan keranjang bersamaan dengan produk
+      // yang keluar kembali dari keranjang.
+      await new Promise((resolve) => window.setTimeout(resolve, 180));
+      const flyOut = (async () => {
+        await animate(
+          flyer,
+          {
+            x: deltaX,
+            y: deltaY,
+            scale: 0.16,
+            rotate: 0,
+            opacity: 0,
+          },
+          { duration: 0 },
+        ).finished;
+
+        await animate(
+          flyer,
+          {
+            x: [deltaX, deltaX * 0.52, 0],
+            y: [deltaY, deltaY * 0.25 - 70, 0],
+            scale: [0.16, 0.72, 1],
+            rotate: [0, 10, -6, 0],
+            opacity: [0, 0.9, 1],
+          },
+          {
+            duration: 0.56,
+            ease: [0.22, 0.7, 0.25, 1],
+          },
+        ).finished;
+      })();
+
+      await Promise.all([flyOut, shakeCart(cart)]);
     } catch {
       // Animasi hanya dekoratif; produk sudah ditambahkan ke keranjang.
     } finally {

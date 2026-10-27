@@ -12,6 +12,9 @@ port = 55322
 shadow_port = 55320
 major_version = 17
 
+[auth.email]
+enable_confirmations = false
+
 [studio]
 enabled = true
 port = 55323

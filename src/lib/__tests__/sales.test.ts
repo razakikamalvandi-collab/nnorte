@@ -15,6 +15,7 @@ const order = (overrides: Partial<Order> = {}): Order => {
     orderType: 'dine_in',
     items: [],
     subtotal: 0,
+    discount: 0,
     tax: 0,
     serviceCharge: 0,
     totalAmount: 0,

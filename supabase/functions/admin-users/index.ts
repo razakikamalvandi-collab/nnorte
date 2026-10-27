@@ -7,6 +7,7 @@
 //   { action: "create_user",    full_name, role, branch_id, password, phone? }
 //   { action: "reset_password", user_id, new_password }
 //   { action: "revoke_access",  user_id }
+//   { action: "update_profile", user_id, full_name, phone }
 //
 // create_user & reset_password hanya untuk PEMILIK UTAMA (membership role = owner,
 // status = active). revoke_access juga boleh dari ADMIN CABANG aktif, dengan cakupan
@@ -115,6 +116,40 @@ Deno.serve(async (req: Request) => {
       });
       if (error) console.error("Gagal menulis audit log:", error.message);
     };
+
+    // ------------------------------------------------------------- update_profile
+    if (payload.action === "update_profile") {
+      const userId = payload.user_id;
+      const fullName = typeof payload.full_name === "string" ? payload.full_name.trim() : "";
+      const phone = typeof payload.phone === "string" ? payload.phone.trim() : "";
+      if (typeof userId !== "string" || !UUID_RE.test(userId)) throw new HttpError(400, "Pengguna tidak valid.");
+      if (fullName.length < 2 || fullName.length > 80) throw new HttpError(400, "Nama lengkap harus 2-80 karakter.");
+      if (!phone || phone.length > 30 || !PHONE_RE.test(normalizePhone(phone))) {
+        throw new HttpError(400, "Nomor telepon Indonesia tidak valid.");
+      }
+
+      const { data: memberships, error: targetErr } = await admin
+        .from("memberships")
+        .select("restaurant_id, role, branch_id, status")
+        .eq("user_id", userId);
+      if (targetErr) throw new HttpError(500, "Gagal memeriksa data pengguna.");
+      const targetRows = memberships ?? [];
+      if (targetRows.length === 0 || targetRows.some((m) => m.restaurant_id !== restaurantId)) {
+        throw new HttpError(403, "Pengguna bukan anggota cabang yang dapat dikelola.");
+      }
+      if (targetRows.some((m) => m.role === "owner")) throw new HttpError(403, "Profil pemilik utama tidak dapat diubah dari menu ini.");
+      if (callerRole === "branch_admin" && targetRows.some((m) =>
+        m.status !== "active" || m.role !== "cashier" && m.role !== "kitchen" || m.branch_id !== callerBranchId
+      )) {
+        throw new HttpError(403, "Admin cabang hanya dapat mengubah profil kasir/dapur aktif di cabangnya sendiri.");
+      }
+
+      const { error: profileErr } = await admin.from("profiles").update({ full_name: fullName, phone }).eq("id", userId);
+      if (profileErr) throw new HttpError(500, "Gagal memperbarui profil karyawan.");
+      const targetBranch = targetRows.find((m) => m.branch_id)?.branch_id as string | null | undefined;
+      await audit(targetBranch ?? null, "UBAH_PROFIL_KARYAWAN", `${userId}: ${fullName}`);
+      return json(req, 200, { ok: true });
+    }
 
     // ------------------------------------------------------------------ create_user
     if (payload.action === "create_user") {

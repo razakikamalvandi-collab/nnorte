@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowLeft,
   ArrowRight,
   Banknote,
   ChevronDown,
@@ -10,10 +11,10 @@ import {
   Eye,
   EyeOff,
   Flame,
+  Heart,
   IceCreamCone,
   Info,
   Leaf,
-  LogIn,
   LogOut,
   MapPin,
   Minus,
@@ -25,12 +26,13 @@ import {
   RefreshCw,
   Sandwich,
   Search,
+  Scale,
   ShieldCheck,
   ShoppingBag,
+  ShoppingBasket,
   Sparkles,
   Star,
   Trash2,
-  UserPlus,
   UserRound,
   Utensils,
   Zap,
@@ -50,16 +52,24 @@ import {
   PortalMenuItem,
   PortalOrderStatus,
   PortalTable,
+  type PortalCompensationVoucher,
+  type PortalMenuReviews,
+  type PortalMenuMetrics,
   type PortalOrderRatings,
   createOrder,
   fetchBranches,
   fetchMenu,
+  fetchMenuReviews,
+  fetchMenuMetrics,
   fetchOrderRatings,
   fetchOrderStatus,
+  checkCompensationVoucher,
   resolveTable,
   submitOrderRating,
+  setMenuFavorite,
 } from '../../lib/portalApi';
 import { isDrinkCategory, toSceneStatus } from '../../lib/orderProgress';
+import { calculateNutrition } from '../../lib/nutrition';
 import { formatRupiah, getOrderStatusBadge, getPaymentStatusBadge } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
@@ -81,6 +91,18 @@ const safeGet = (k: string) => { try { return sessionStorage.getItem(k); } catch
 const safeSet = (k: string, v: string) => { try { sessionStorage.setItem(k, v); } catch { /* abaikan */ } };
 
 const lineUnit = (l: CartLine) => l.menu.price + l.menu.addons.filter((a) => l.addonIds.includes(a.id)).reduce((s, a) => s + a.price, 0);
+
+function detailVariants(menuItem: PortalMenuItem) {
+  const variants = [...menuItem.variants];
+  if (!variants.some((variant) => /porsi|ukuran|size/i.test(variant.name))) {
+    variants.unshift({ name: 'Porsi', options: ['Reguler', 'Besar'] });
+  }
+  if (isDrinkCategory(menuItem.category) === 'drink' && !variants.some((variant) => /es|ice/i.test(variant.name))) {
+    const portionIndex = variants.findIndex((variant) => /porsi|ukuran|size/i.test(variant.name));
+    variants.splice(portionIndex + 1, 0, { name: 'Es', options: ['Es banyak', 'Es sedang', 'Non ice'] });
+  }
+  return variants;
+}
 
 const ORDER_TABS = [
   { id: 'cart', label: 'Keranjang', icon: ShoppingBag },
@@ -123,8 +145,10 @@ function GoogleMark() {
 
 export const CustomerPortal: React.FC = () => {
   const { user, signIn, signUp, signInWithGoogle, signOut, resetPassword } = useAuth();
-  const { addToast } = useApp();
+  const { addToast, currentUser } = useApp();
   const qrToken = useMemo(() => new URLSearchParams(window.location.search).get('qr'), []);
+  const requestedBranchId = useMemo(() => new URLSearchParams(window.location.search).get('branch'), []);
+  const staffBranchId = currentUser?.role === 'branch_admin' ? currentUser.branchId : undefined;
 
   const [splash, setSplash] = useState(() => safeGet(SEEN_KEY) !== '1');
   const [steps, setSteps] = useState({ done: 0, total: 3 });
@@ -134,6 +158,9 @@ export const CustomerPortal: React.FC = () => {
   const [table, setTable] = useState<PortalTable | null>(null);
   const [branchId, setBranchId] = useState('');
   const [menu, setMenu] = useState<PortalMenuItem[]>([]);
+  const [menuMetrics, setMenuMetrics] = useState<Record<string, PortalMenuMetrics>>({});
+  const [menuMetricsState, setMenuMetricsState] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  const [favoritePending, setFavoritePending] = useState<Record<string, boolean>>({});
   const [menuLoading, setMenuLoading] = useState(false);
   const [menuError, setMenuError] = useState<string | null>(null);
 
@@ -141,19 +168,26 @@ export const CustomerPortal: React.FC = () => {
   const [category, setCategory] = useState('all');
   const [cart, setCart] = useState<CartLine[]>([]);
   const [optionFor, setOptionFor] = useState<PortalMenuItem | null>(null);
-  const [opt, setOpt] = useState<{ addonIds: string[]; variants: Record<string, string>; notes: string }>({ addonIds: [], variants: {}, notes: '' });
+  const [menuReviews, setMenuReviews] = useState<PortalMenuReviews | null>(null);
+  const [menuReviewsLoading, setMenuReviewsLoading] = useState(false);
+  const [menuReviewsError, setMenuReviewsError] = useState<string | null>(null);
+  const [opt, setOpt] = useState<{ addonIds: string[]; variants: Record<string, string>; notes: string; quantity: number }>({ addonIds: [], variants: {}, notes: '', quantity: 1 });
 
   const [orderOpen, setOrderOpen] = useState(false);
   const [orderTab, setOrderTab] = useState<OrderTab>('cart');
   const [tableInfoOpen, setTableInfoOpen] = useState(false);
   const [successOpen, setSuccessOpen] = useState(false);
-  const [lastOrder, setLastOrder] = useState<{ orderNumber: string; total: number } | null>(null);
+  const [lastOrder, setLastOrder] = useState<{ orderNumber: string; total: number; discount: number } | null>(null);
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [orderType, setOrderType] = useState<'dine_in' | 'takeaway'>('dine_in');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [voucherCode, setVoucherCode] = useState('');
+  const [voucher, setVoucher] = useState<PortalCompensationVoucher | null>(null);
+  const [voucherError, setVoucherError] = useState<string | null>(null);
+  const [voucherBusy, setVoucherBusy] = useState(false);
 
   const [track, setTrack] = useState<{ orderId: string; token: string } | null>(() => {
     try { const v = safeGet(TRACK_KEY); return v ? (JSON.parse(v) as { orderId: string; token: string }) : null; } catch { return null; }
@@ -178,12 +212,9 @@ export const CustomerPortal: React.FC = () => {
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
-  const [accountOpen, setAccountOpen] = useState(false);
 
   const branch = branches.find((b) => b.id === branchId);
   const locked = !!table; // cabang ditentukan oleh QR meja
-  const displayName = user ? (user.name && !user.name.includes('@') ? user.name : user.email) : '';
-  const initials = displayName.split(/[\s@._-]+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? '').join('') || 'NN';
 
   const loadMenu = useCallback(async (id: string) => {
     const req = ++menuReq.current;
@@ -236,7 +267,8 @@ export const CustomerPortal: React.FC = () => {
       }
       setTable(tbl);
       setSteps((s) => ({ ...s, done: 2 }));
-      const target = tbl?.branchId ?? bs[0]?.id ?? '';
+      const requestedBranch = bs.find((branch) => branch.id === requestedBranchId)?.id;
+      const target = tbl?.branchId ?? staffBranchId ?? requestedBranch ?? bs[0]?.id ?? '';
       setBranchId(target);
       if (target) {
         const m = await fetchMenu(target);
@@ -249,11 +281,50 @@ export const CustomerPortal: React.FC = () => {
     } catch (e) {
       setBootError(e instanceof Error ? e.message : 'Gagal memuat data.');
     }
-  }, [qrToken]);
+  }, [qrToken, requestedBranchId, staffBranchId]);
 
   useEffect(() => {
     void boot();
   }, [boot]);
+
+  useEffect(() => {
+    if (!branchId) {
+      setMenuMetrics({});
+      return;
+    }
+    let current = true;
+    setMenuMetricsState('loading');
+    void fetchMenuMetrics(branchId)
+      .then((metrics) => {
+        if (!current) return;
+        setMenuMetrics(Object.fromEntries(metrics.map((metric) => [metric.menuItemId, metric])));
+        setMenuMetricsState('ready');
+      })
+      .catch((error) => {
+        if (!current) return;
+        console.warn('Statistik menu gagal dimuat.', error);
+        setMenuMetricsState('unavailable');
+      });
+    return () => { current = false; };
+  }, [branchId, user?.id]);
+
+  useEffect(() => {
+    if (!optionFor || !branchId) {
+      setMenuReviews(null);
+      setMenuReviewsError(null);
+      setMenuReviewsLoading(false);
+      return;
+    }
+    let current = true;
+    setMenuReviews(null);
+    setMenuReviewsError(null);
+    setMenuReviewsLoading(true);
+    void fetchMenuReviews(branchId, optionFor.id)
+      .then((result) => { if (current) setMenuReviews(result); })
+      .catch((error) => { if (current) setMenuReviewsError(error instanceof Error ? error.message : 'Ulasan gagal dimuat.'); })
+      .finally(() => { if (current) setMenuReviewsLoading(false); });
+    return () => { current = false; };
+  }, [branchId, optionFor?.id]);
 
   // Batas waktu: splash tidak boleh menggantung selamanya.
   useEffect(() => {
@@ -321,13 +392,21 @@ export const CustomerPortal: React.FC = () => {
 
   const count = cart.reduce((s, l) => s + l.quantity, 0);
   const subtotal = cart.reduce((s, l) => s + lineUnit(l) * l.quantity, 0);
-  const tax = Math.round((subtotal * (branch?.taxPercentage ?? 0)) / 100);
-  const service = Math.round((subtotal * (branch?.servicePercentage ?? 0)) / 100);
-  const totalEstimate = subtotal + tax + service;
+  const voucherDiscount = voucher ? Math.min(Math.round(subtotal * voucher.discountPercent / 100), voucher.maxDiscount, subtotal) : 0;
+  const discountedSubtotal = subtotal - voucherDiscount;
+  const tax = Math.round((discountedSubtotal * (branch?.taxPercentage ?? 0)) / 100);
+  const service = Math.round((discountedSubtotal * (branch?.servicePercentage ?? 0)) / 100);
+  const totalEstimate = discountedSubtotal + tax + service;
 
   const optUnit = optionFor
     ? optionFor.price + optionFor.addons.filter((a) => opt.addonIds.includes(a.id)).reduce((sum, a) => sum + a.price, 0)
     : 0;
+  const optTotal = optUnit * opt.quantity;
+  const optionNutrition = useMemo(
+    () => optionFor && optionFor.ingredients.length > 0 ? calculateNutrition(optionFor.ingredients) : null,
+    [optionFor],
+  );
+  const optionVariants = useMemo(() => optionFor ? detailVariants(optionFor) : [], [optionFor]);
 
   const canTakeaway = !!branch?.allowTakeaway;
   const sb = status ? getOrderStatusBadge(status.status) : null;
@@ -355,21 +434,21 @@ export const CustomerPortal: React.FC = () => {
   const ratingsReady = !!ratings && !ratingsLoading;
   const canRateOrder = !!status && status.items.length > 0 && status.items.every((item) => !!item.orderItemId);
 
-  const handleRate = async (submitted: RatingSubmit[]) => {
+  const handleRate = async (submitted: RatingSubmit[]): Promise<PortalCompensationVoucher | null> => {
     const currentTrack = track;
     if (!currentTrack) throw new Error('Pesanan tidak ditemukan.');
-    await submitOrderRating(currentTrack.orderId, currentTrack.token, submitted);
+    const issuedVoucher = await submitOrderRating(currentTrack.orderId, currentTrack.token, submitted);
 
     // Jangan pernah mencampur rating pesanan lama ke pesanan yang sedang
     // dilacak bila pelanggan berganti pesanan saat RPC masih berjalan.
     if (
       trackRef.current?.orderId !== currentTrack.orderId ||
       trackRef.current?.token !== currentTrack.token
-    ) return;
+    ) return issuedVoucher;
 
     // Perbarui tampilan lebih dulu agar dialog sukses tidak menunggu refetch.
     setRatings((current) => {
-      const next: PortalOrderRatings = current ?? { orderRating: null, orderReview: null, items: [] };
+      const next: PortalOrderRatings = current ?? { orderRating: null, orderReview: null, items: [], compensation: null };
       const overall = submitted.find((entry) => entry.orderItemId == null);
       const items = [...next.items];
       for (const entry of submitted) {
@@ -382,16 +461,39 @@ export const CustomerPortal: React.FC = () => {
         orderRating: overall?.rating ?? next.orderRating,
         orderReview: overall?.review?.trim() || next.orderReview,
         items,
+        compensation: issuedVoucher ?? next.compensation,
       };
     });
 
     // Refetch senyap: dialog sukses tidak boleh tertutup hanya karena loading.
     void loadRatings(true);
+    return issuedVoucher;
+  };
+
+  const applyVoucher = async () => {
+    if (!branch || !voucherCode.trim() || voucherBusy) return;
+    setVoucherBusy(true);
+    setVoucherError(null);
+    try {
+      const checked = await checkCompensationVoucher(branch.id, voucherCode.trim());
+      setVoucher(checked);
+      setVoucherCode(checked.code);
+    } catch (error) {
+      setVoucher(null);
+      setVoucherError(error instanceof Error ? error.message : 'Kode kompensasi tidak valid.');
+    } finally {
+      setVoucherBusy(false);
+    }
   };
 
   const scrollToMenu = () => {
     const behavior = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
     document.getElementById('portal-menu')?.scrollIntoView({ behavior, block: 'start' });
+  };
+
+  const scrollToSection = (id: string) => {
+    const behavior = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    document.getElementById(id)?.scrollIntoView({ behavior, block: 'start' });
   };
 
   const selectCategory = (next: string) => {
@@ -433,6 +535,9 @@ export const CustomerPortal: React.FC = () => {
   const changeBranch = (id: string) => {
     if (cart.length > 0 && !window.confirm('Mengganti cabang akan mengosongkan keranjang. Lanjutkan?')) return;
     setCart([]);
+    setVoucher(null);
+    setVoucherCode('');
+    setVoucherError(null);
     setBranchId(id);
     void loadMenu(id);
   };
@@ -442,8 +547,43 @@ export const CustomerPortal: React.FC = () => {
     setAuthError(null);
     setAuthNotice(null);
     setAuthPassword('');
-    setAccountOpen(false);
     setAuthOpen(true);
+  };
+
+  const toggleMenuFavorite = async (event: React.MouseEvent, item: PortalMenuItem) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!user || user.role !== 'customer') {
+      openAuth('login');
+      return;
+    }
+    if (favoritePending[item.id] || !branchId) return;
+
+    const wasFavorite = menuMetrics[item.id]?.isFavorite === true;
+    const nextFavorite = !wasFavorite;
+    setFavoritePending((current) => ({ ...current, [item.id]: true }));
+    setMenuMetrics((current) => ({
+      ...current,
+      [item.id]: {
+        menuItemId: item.id,
+        averageRating: current[item.id]?.averageRating ?? 0,
+        reviewCount: current[item.id]?.reviewCount ?? 0,
+        orderCount: current[item.id]?.orderCount ?? 0,
+        isFavorite: nextFavorite,
+      },
+    }));
+    try {
+      await setMenuFavorite(branchId, item.id, nextFavorite);
+      addToast('success', nextFavorite ? `${item.name} disimpan ke menu favorit.` : `${item.name} dihapus dari menu favorit.`);
+    } catch (error) {
+      setMenuMetrics((current) => ({
+        ...current,
+        [item.id]: { ...current[item.id], menuItemId: item.id, isFavorite: wasFavorite },
+      }));
+      addToast('error', error instanceof Error ? error.message : 'Menu favorit gagal disimpan.');
+    } finally {
+      setFavoritePending((current) => ({ ...current, [item.id]: false }));
+    }
   };
 
   const switchAuthMode = (mode: 'login' | 'register' | 'forgot') => {
@@ -510,17 +650,16 @@ export const CustomerPortal: React.FC = () => {
   };
 
   const handleSignOut = async () => {
-    setAccountOpen(false);
     await signOut();
   };
 
-  const addLine = (m: PortalMenuItem, addonIds: string[], variants: Record<string, string>, notes: string) => {
+  const addLine = (m: PortalMenuItem, addonIds: string[], variants: Record<string, string>, notes: string, quantity = 1) => {
     const variantChoice = Object.entries(variants).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join('; ').slice(0, 60);
     const key = `${m.id}|${[...addonIds].sort().join(',')}|${variantChoice}|${notes}`;
     setCart((c) => {
       const ex = c.find((l) => l.key === key);
-      if (ex) return c.map((l) => (l.key === key ? { ...l, quantity: Math.min(50, l.quantity + 1) } : l));
-      return [...c, { key, menu: m, quantity: 1, addonIds, variantChoice, notes }];
+      if (ex) return c.map((l) => (l.key === key ? { ...l, quantity: Math.min(50, l.quantity + quantity) } : l));
+      return [...c, { key, menu: m, quantity: Math.min(50, quantity), addonIds, variantChoice, notes }];
     });
     setOptionFor(null);
   };
@@ -532,13 +671,13 @@ export const CustomerPortal: React.FC = () => {
 
   const confirmAddOption = () => {
     if (!optionFor) return;
-    addLine(optionFor, opt.addonIds, opt.variants, opt.notes.trim());
+    addLine(optionFor, opt.addonIds, opt.variants, opt.notes.trim(), opt.quantity);
     pulseCart();
     addToast('success', `${optionFor.name} ditambahkan ke keranjang.`);
   };
 
   const openItem = (m: PortalMenuItem) => {
-    setOpt({ addonIds: [], variants: Object.fromEntries(m.variants.map((v) => [v.name, v.options[0] ?? ''])), notes: '' });
+    setOpt({ addonIds: [], variants: Object.fromEntries(detailVariants(m).map((v) => [v.name, v.options[0] ?? ''])), notes: '', quantity: 1 });
     setOptionFor(m);
   };
 
@@ -571,14 +710,26 @@ export const CustomerPortal: React.FC = () => {
         orderType,
         customer: name.trim(),
         phone: phone.trim(),
+        voucherCode: voucher?.code,
         lines: cart.map((l) => ({ menuId: l.menu.id, quantity: l.quantity, variantChoice: l.variantChoice, notes: l.notes, addonIds: l.addonIds })),
       });
       const t = { orderId: res.orderId, token: res.trackingToken };
+      const orderedMenuIds = new Set(cart.map((line) => line.menu.id));
+      setMenuMetrics((current) => {
+        const next = { ...current };
+        orderedMenuIds.forEach((menuItemId) => {
+          const metric = next[menuItemId];
+          if (metric) next[menuItemId] = { ...metric, orderCount: metric.orderCount + 1 };
+        });
+        return next;
+      });
       safeSet(TRACK_KEY, JSON.stringify(t));
       setTrack(t);
       setStatus(null);
       setStatusError(null);
-      setLastOrder({ orderNumber: res.orderNumber, total: res.total });
+      setLastOrder({ orderNumber: res.orderNumber, total: res.total, discount: res.discount });
+      setVoucher(null);
+      setVoucherCode('');
       setCart([]);
       setOrderOpen(false);
       setOrderTab('track');
@@ -612,128 +763,159 @@ export const CustomerPortal: React.FC = () => {
     );
   }
 
-  return (
-    <div className="flex min-h-screen flex-col bg-nnorte-bg font-sans text-nnorte-text">
-      <header className="sticky top-0 z-30 border-b border-nnorte-border bg-nnorte-sidebar/90 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-4 sm:px-6 lg:px-8">
-          <div className="flex min-w-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={() => window.scrollTo({ top: 0, behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })}
-              className="flex min-w-0 cursor-pointer items-center gap-2.5"
-              aria-label="NNORTE, kembali ke atas"
-            >
-              <img src="/nnorte-logo.svg" alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
-              <span className="hidden min-w-0 text-left sm:block">
-                <span className="block truncate text-base font-black tracking-[0.16em]">NNORTE</span>
-                <span className="hidden text-[8px] font-bold uppercase tracking-[0.2em] text-nnorte-muted sm:block">Restoran Multi Cabang</span>
-              </span>
+  if (optionFor) {
+    return (
+      <div className="nnorte-customer-portal flex min-h-screen flex-col bg-nnorte-bg font-sans text-nnorte-text">
+        <header className="sticky top-0 z-30 border-b border-nnorte-border bg-nnorte-sidebar/95 backdrop-blur-xl">
+          <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-3 px-4 sm:px-6">
+            <button type="button" onClick={() => setOptionFor(null)} className="nn-press inline-flex h-10 items-center gap-2 rounded-xl px-2 text-sm font-semibold text-nnorte-text hover:bg-nnorte-surface-2" aria-label="Kembali ke menu">
+              <ArrowLeft size={17} aria-hidden="true" /> Kembali ke Menu
             </button>
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <button type="button" onClick={() => { setOptionFor(null); openOrder('cart'); }} aria-label={`Buka keranjang, ${count} item`} className="nn-press relative flex h-10 w-10 items-center justify-center rounded-xl border border-nnorte-border bg-nnorte-surface-2 text-nnorte-text">
+                <ShoppingBag size={17} aria-hidden="true" />
+                {count > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-nnorte-red px-1 text-[10px] font-black text-white">{count}</span>}
+              </button>
+            </div>
+          </div>
+        </header>
 
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-5 sm:px-6 sm:py-8">
+          <div className="grid gap-6 md:grid-cols-2 md:items-start lg:gap-8">
+            <div className="space-y-5">
+              <div className="overflow-hidden rounded-2xl border border-nnorte-border bg-nnorte-surface-2 shadow-sm">
+                {optionFor.image ? <img src={optionFor.image} alt={optionFor.name} className="aspect-[4/3] w-full object-cover" /> : <div className="flex aspect-[4/3] items-center justify-center text-nnorte-muted"><Utensils size={52} aria-hidden="true" /></div>}
+              </div>
+              <MenuNutritionPanel ingredients={optionFor.ingredients} allergens={optionFor.allergens} reviews={menuReviews} reviewsLoading={menuReviewsLoading} reviewsError={menuReviewsError} />
+            </div>
+            <div className="space-y-5">
+              <section>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-nnorte-red">{optionFor.category}</p>
+                    <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">{optionFor.name}</h1>
+                  </div>
+                  {optionFor.soldOut && <span className="rounded-full bg-nnorte-error/10 px-3 py-1 text-xs font-bold text-nnorte-error">Menu habis</span>}
+                </div>
+                <p className="mt-3 text-sm leading-relaxed text-nnorte-muted">{optionFor.description || 'Hidangan pilihan dari dapur NNORTE.'}</p>
+                <p className="mt-4 text-xl font-black text-nnorte-red">{formatRupiah(optionFor.price)}</p>
+                {menuReviews && menuReviews.count > 0 && <p className="mt-2 flex items-center gap-1 text-xs text-nnorte-muted"><Star size={13} className="fill-current text-nnorte-warning" aria-hidden="true" /> {menuReviews.averageRating.toFixed(1)} <span>({menuReviews.count} ulasan)</span></p>}
+              </section>
+
+              {optionNutrition && optionNutrition.totalWeight > 0 && (
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl bg-nnorte-surface-2 px-4 py-3 text-sm font-semibold text-nnorte-text">
+                  <span className="inline-flex items-center gap-2"><Scale size={15} className="text-nnorte-red" aria-hidden="true" />± {optionNutrition.totalWeight} g berat per porsi</span>
+                  <span className="inline-flex items-center gap-2"><Flame size={15} className="text-nnorte-warning" aria-hidden="true" />{optionNutrition.calories} kkal kalori</span>
+                </div>
+              )}
+
+              {optionVariants.map((variant) => (
+                <Field key={variant.name} label={variant.name}>
+                  <select className={inputClass()} value={opt.variants[variant.name] ?? ''} onChange={(event) => setOpt((current) => ({ ...current, variants: { ...current.variants, [variant.name]: event.target.value } }))}>
+                    {variant.options.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
+                  </select>
+                </Field>
+              ))}
+
+              {optionFor.addons.length > 0 && (
+                <fieldset className="space-y-2">
+                  <legend className="mb-2 text-sm font-bold">{isDrinkCategory(optionFor.category) === 'drink' ? 'Tambahan Minuman' : 'Tambahan Topping'}</legend>
+                  {optionFor.addons.map((addon) => (
+                    <label key={addon.id} className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-xl border border-nnorte-border bg-nnorte-surface px-3 text-sm">
+                      <span className="flex items-center gap-2"><input type="checkbox" className="h-4 w-4 accent-[var(--c-red)]" checked={opt.addonIds.includes(addon.id)} onChange={(event) => setOpt((current) => ({ ...current, addonIds: event.target.checked ? [...current.addonIds, addon.id] : current.addonIds.filter((id) => id !== addon.id) }))} />{addon.name}</span>
+                      <span className="text-nnorte-muted">+{formatRupiah(addon.price)}</span>
+                    </label>
+                  ))}
+                </fieldset>
+              )}
+              {optionFor.addons.length === 0 && isDrinkCategory(optionFor.category) === 'food' && (
+                <p className="rounded-xl border border-dashed border-nnorte-border px-3 py-2 text-xs text-nnorte-muted">Topping tambahan belum diatur untuk menu ini.</p>
+              )}
+
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-semibold text-nnorte-muted">Jumlah</span>
+                <div className="inline-flex h-10 items-center overflow-hidden rounded-xl border border-nnorte-border bg-nnorte-surface">
+                  <button type="button" aria-label="Kurangi jumlah" disabled={opt.quantity <= 1} onClick={() => setOpt((current) => ({ ...current, quantity: Math.max(1, current.quantity - 1) }))} className="h-full w-10 font-bold text-nnorte-text hover:bg-nnorte-surface-2 disabled:opacity-40">−</button>
+                  <span className="w-9 text-center text-sm font-bold" aria-live="polite">{opt.quantity}</span>
+                  <button type="button" aria-label="Tambah jumlah" disabled={opt.quantity >= 50} onClick={() => setOpt((current) => ({ ...current, quantity: Math.min(50, current.quantity + 1) }))} className="h-full w-10 font-bold text-nnorte-text hover:bg-nnorte-surface-2 disabled:opacity-40">+</button>
+                </div>
+              </div>
+
+              <Field label="Catatan (opsional)" hint="Contoh: tanpa bawang, sambal terpisah.">
+                <input type="text" maxLength={200} className={inputClass()} value={opt.notes} onChange={(event) => setOpt((current) => ({ ...current, notes: event.target.value }))} />
+              </Field>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-nnorte-border bg-nnorte-surface p-3 sm:p-4">
+                <div className="min-w-0"><p className="text-[10px] text-nnorte-muted">Total · {opt.quantity} item</p><p className="text-base font-black text-nnorte-red">{formatRupiah(optTotal)}</p></div>
+                <Button disabled={optionFor.soldOut} className="shrink-0" onClick={confirmAddOption}>{optionFor.soldOut ? 'Menu sedang habis' : 'Tambah ke Keranjang'}</Button>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="nnorte-customer-portal flex min-h-screen flex-col bg-nnorte-bg font-sans text-nnorte-text">
+      <header id="portal-top" className="sticky top-0 z-30 border-b border-nnorte-border bg-nnorte-sidebar/95 backdrop-blur-xl">
+        <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 shrink-0 items-center gap-2.5">
+            <button type="button" onClick={() => scrollToSection('portal-top')} className="inline-flex shrink-0 items-center gap-2" aria-label="NNORTE, kembali ke atas">
+              <img src="/logo-badge.png" alt="" aria-hidden="true" className="h-10 w-10 shrink-0 rounded-xl bg-white object-cover shadow-sm" />
+              <span className="text-base font-black tracking-tight text-nnorte-red sm:text-lg">NNORTE</span>
+            </button>
             {table ? (
-              <button
-                type="button"
-                onClick={() => setTableInfoOpen(true)}
-                aria-label={`Meja ${table.tableNumber}, lihat info meja`}
-                className="nn-press inline-flex h-8 max-w-32 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nnorte-red/35 bg-nnorte-red/10 px-2.5 text-[10px] font-bold text-nnorte-red"
-              >
-                <QrCode size={11} aria-hidden="true" />
-                <span className="truncate">Meja {table.tableNumber}</span>
+              <button type="button" onClick={() => setTableInfoOpen(true)} aria-label={`Meja ${table.tableNumber}, lihat info meja`} className="hidden h-8 max-w-24 shrink-0 items-center gap-1 rounded-full border border-nnorte-red/35 bg-nnorte-red/10 px-2 text-[10px] font-bold text-nnorte-red sm:inline-flex">
+                <QrCode size={11} aria-hidden="true" /><span className="truncate">Meja {table.tableNumber}</span>
               </button>
             ) : !locked && branches.length > 0 ? (
-              <label className="relative inline-flex h-8 max-w-40 shrink-0 items-center gap-1 rounded-full border border-nnorte-border bg-nnorte-surface-2 pl-2.5 pr-1 text-[10px] font-semibold text-nnorte-muted">
+              <label className="relative hidden h-8 max-w-32 shrink-0 items-center gap-1 rounded-full border border-nnorte-border bg-nnorte-surface-2 pl-2 pr-5 text-[10px] font-semibold text-nnorte-muted sm:inline-flex">
                 <MapPin size={11} className="shrink-0" aria-hidden="true" />
-                <select
-                  value={branchId}
-                  onChange={(e) => changeBranch(e.target.value)}
-                  aria-label="Pilih cabang"
-                  className="min-w-0 max-w-28 cursor-pointer appearance-none truncate bg-transparent py-1 pr-4 text-[10px] font-semibold text-nnorte-text outline-none"
-                >
-                  {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                <select value={branchId} onChange={(event) => changeBranch(event.target.value)} aria-label="Pilih cabang" className="min-w-0 max-w-24 cursor-pointer appearance-none truncate bg-transparent py-1 text-[10px] font-semibold text-nnorte-text outline-none">
+                  {branches.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>
                 <ChevronDown size={11} className="pointer-events-none absolute right-1.5" aria-hidden="true" />
               </label>
             ) : null}
           </div>
 
-          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          <nav aria-label="Navigasi utama" className="hidden items-center gap-7 xl:flex">
+            <button type="button" onClick={() => scrollToSection('portal-top')} className="border-b-2 border-nnorte-red py-5 text-xs font-bold text-nnorte-red">Beranda</button>
+            <button type="button" onClick={scrollToMenu} className="border-b-2 border-transparent py-5 text-xs font-semibold text-nnorte-muted hover:text-nnorte-text">Menu</button>
+            <button type="button" onClick={() => scrollToSection('portal-about')} className="border-b-2 border-transparent py-5 text-xs font-semibold text-nnorte-muted hover:text-nnorte-text">Tentang Kami</button>
+            <button type="button" onClick={() => scrollToSection('portal-promo')} className="border-b-2 border-transparent py-5 text-xs font-semibold text-nnorte-muted hover:text-nnorte-text">Promo</button>
+          </nav>
+
+          <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-2.5">
+            <div className="relative hidden w-40 lg:block xl:w-52">
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-nnorte-muted" aria-hidden="true" />
+              <input type="search" aria-label="Cari menu" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari makanan, minuman…" className={`${inputClass()} h-9 rounded-full pl-9 text-[10px]`} />
+            </div>
+            <button type="button" onClick={() => { scrollToMenu(); if (window.innerWidth < 1024) window.setTimeout(() => document.querySelector<HTMLInputElement>('#menu-search')?.focus(), 250); }} className="nn-press flex h-9 w-9 items-center justify-center rounded-xl text-nnorte-muted hover:bg-nnorte-surface-2 hover:text-nnorte-text lg:hidden" aria-label="Cari menu">
+              <Search size={17} aria-hidden="true" />
+            </button>
+            <button type="button" onClick={() => window.location.assign('/?mode=login')} aria-label="Masuk ke halaman login NNORTE" className="nn-press flex h-9 w-9 items-center justify-center rounded-xl text-nnorte-text hover:bg-nnorte-surface-2">
+              {user?.avatar ? <img src={user.avatar} alt="" className="h-7 w-7 rounded-full object-cover" /> : <UserRound size={18} aria-hidden="true" />}
+            </button>
+            {user && <button type="button" onClick={() => void handleSignOut()} aria-label="Keluar dari akun pelanggan" title="Keluar" className="nn-press flex h-9 w-9 items-center justify-center rounded-xl text-nnorte-muted hover:bg-nnorte-surface-2 hover:text-nnorte-red"><LogOut size={16} aria-hidden="true" /></button>}
             <ThemeToggle />
-            {user ? (
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setAccountOpen((open) => !open)}
-                  aria-haspopup="menu"
-                  aria-expanded={accountOpen}
-                  aria-label={`Akun ${displayName}`}
-                  className="nn-press flex h-9 cursor-pointer items-center gap-1.5 rounded-xl border border-nnorte-border bg-nnorte-surface-2 px-1.5 text-nnorte-text hover:border-nnorte-blue/40"
-                >
-                  {user.avatar
-                    ? <img src={user.avatar} alt="" className="h-6 w-6 rounded-full object-cover" />
-                    : <span className="flex h-6 w-6 items-center justify-center rounded-full bg-nnorte-red text-[9px] font-black text-nnorte-on-brand">{initials}</span>}
-                  <span className="hidden max-w-20 truncate text-[11px] font-semibold sm:inline">{displayName.split(' ')[0]}</span>
-                </button>
-                {accountOpen && (
-                  <>
-                    <button type="button" tabIndex={-1} aria-label="Tutup menu akun" onClick={() => setAccountOpen(false)} className="fixed inset-0 z-10 cursor-default bg-transparent" />
-                    <div role="menu" aria-label="Menu akun" className="absolute right-0 z-20 mt-2 w-60 overflow-hidden rounded-xl border border-nnorte-border bg-nnorte-surface shadow-xl">
-                      <div className="border-b border-nnorte-border px-3 py-2.5">
-                        <p className="truncate text-[11px] font-bold text-nnorte-text">{displayName}</p>
-                        <p className="truncate text-[10px] text-nnorte-muted">{user.email}</p>
-                      </div>
-                      {track && (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => { setAccountOpen(false); openOrder('track'); }}
-                          className="flex min-h-10 w-full cursor-pointer items-center gap-2 px-3 text-[11px] font-semibold text-nnorte-text hover:bg-nnorte-surface-2"
-                        >
-                          <ReceiptText size={13} aria-hidden="true" /> Lacak Pesanan
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => void handleSignOut()}
-                        className="flex min-h-10 w-full cursor-pointer items-center gap-2 px-3 text-[11px] font-semibold text-nnorte-text hover:bg-nnorte-surface-2"
-                      >
-                        <LogOut size={13} aria-hidden="true" /> Keluar
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => openAuth('login')}
-                aria-label="Masuk ke akun pelanggan"
-                className="nn-press flex h-9 cursor-pointer items-center gap-1.5 rounded-xl border border-nnorte-border bg-nnorte-surface-2 px-2.5 text-[11px] font-semibold text-nnorte-text hover:border-nnorte-blue/40"
-              >
-                <LogIn size={14} aria-hidden="true" /> <span className="hidden sm:inline">Masuk</span>
-              </button>
-            )}
-            <button
-              ref={cartRef}
-              type="button"
-              onClick={() => openOrder('cart')}
-              aria-label={`Buka keranjang, ${count} item`}
-              className="nn-press relative inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-nnorte-border bg-nnorte-surface-2 text-nnorte-text hover:border-nnorte-blue/40"
-            >
-              <ShoppingBag size={17} aria-hidden="true" />
-              <span className="nnorte-cart-ripple pointer-events-none absolute inset-0 rounded-[inherit] border-2 border-current text-nnorte-red opacity-0" aria-hidden="true" />
-              {count > 0 && <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-nnorte-red px-1 text-[10px] font-black text-nnorte-on-brand shadow-md">{count > 99 ? '99+' : count}</span>}
+            <button ref={cartRef} type="button" onClick={() => openOrder('cart')} aria-label={`Buka keranjang, ${count} item`} className="nn-press relative flex h-10 w-10 items-center justify-center rounded-xl text-nnorte-text hover:bg-nnorte-surface-2">
+              <ShoppingBasket size={21} aria-hidden="true" />
+              {count > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-nnorte-red px-1 text-[10px] font-black text-white shadow-md">{count > 99 ? '99+' : count}</span>}
             </button>
           </div>
         </div>
       </header>
 
+      {/* account menu block and header controls live above */}
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
         {branches.length === 0 ? (
           <EmptyState icon={Utensils} title="Belum ada cabang yang buka" description="Silakan kembali beberapa saat lagi." />
         ) : (
           <div className="space-y-5 sm:space-y-7">
-            <section className="relative overflow-hidden rounded-3xl border border-nnorte-border bg-gradient-to-br from-nnorte-red-dark/25 via-nnorte-surface to-nnorte-surface p-5 shadow-xl sm:p-7">
+            <section id="portal-promo" className="relative scroll-mt-24 overflow-hidden rounded-3xl border border-nnorte-border bg-gradient-to-br from-nnorte-red-dark/25 via-nnorte-surface to-nnorte-surface p-5 shadow-xl sm:p-7">
               <div className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-nnorte-red/10 blur-3xl" aria-hidden="true" />
               <div className="relative grid gap-5 md:grid-cols-12 md:items-center">
                 <div className="space-y-4 md:col-span-7">
@@ -742,26 +924,13 @@ export const CustomerPortal: React.FC = () => {
                   </span>
                   <div className="space-y-2">
                     <h1 className="max-w-xl text-3xl font-black leading-[1.08] tracking-tight sm:text-4xl">
-                      {table ? 'Pesan langsung dari meja Anda.' : canTakeaway ? 'Pesan untuk dibawa pulang.' : 'Pindai QR meja untuk memesan.'}
+                      Rasa Terbaik Dalam Setiap Gigitan
                     </h1>
                     <p className="max-w-lg text-[11px] leading-relaxed text-nnorte-muted sm:text-sm">
                       {branch?.tagline || 'Pilih hidangan favorit, kirim pesanan, dan lacak prosesnya tanpa perlu antre.'}
                     </p>
                   </div>
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <div className="relative min-w-0 flex-1">
-                      <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-nnorte-muted" aria-hidden="true" />
-                      <input
-                        type="search"
-                        aria-label="Cari menu"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Cari makanan atau minuman…"
-                        className={`${inputClass()} pl-9`}
-                      />
-                    </div>
-                    <Button className="shrink-0" onClick={scrollToMenu} icon={<ArrowRight size={14} />}>Cari Menu</Button>
-                  </div>
+                  <Button className="w-fit" onClick={scrollToMenu} icon={<ArrowRight size={14} />}>Pesan Sekarang</Button>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[9px] font-semibold text-nnorte-muted">
                     <span className="inline-flex items-center gap-1"><Zap size={11} className="text-nnorte-red" aria-hidden="true" /> Pesanan langsung ke dapur</span>
                     <span className="inline-flex items-center gap-1"><Leaf size={11} className="text-nnorte-success" aria-hidden="true" /> Bahan segar</span>
@@ -778,9 +947,9 @@ export const CustomerPortal: React.FC = () => {
                       aria-label={`Lihat ${featured.name}`}
                     >
                       {featured.image ? (
-                        <img src={featured.image} alt={featured.name} className="nnorte-product-image aspect-[4/3] w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                        <img src={featured.image} alt={featured.name} className="nnorte-product-image aspect-[16/10] w-full object-cover transition-transform duration-500 group-hover:scale-105" />
                       ) : (
-                        <span className="flex aspect-[4/3] w-full items-center justify-center bg-gradient-to-br from-nnorte-red-dark/30 to-nnorte-sidebar text-nnorte-muted"><Utensils size={36} aria-hidden="true" /></span>
+                        <span className="flex aspect-[16/10] w-full items-center justify-center bg-gradient-to-br from-nnorte-red-dark/30 to-nnorte-sidebar text-nnorte-muted"><Utensils size={36} aria-hidden="true" /></span>
                       )}
                       <span className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent" aria-hidden="true" />
                       <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full border border-white/15 bg-black/45 px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-white backdrop-blur">
@@ -823,24 +992,6 @@ export const CustomerPortal: React.FC = () => {
               </button>
             )}
 
-            {!user && (
-              <section className="flex flex-col gap-3 rounded-2xl border border-nnorte-blue/30 bg-nnorte-blue/10 p-3.5 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex min-w-0 items-start gap-2.5">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-nnorte-blue/15 text-nnorte-blue-soft">
-                    <UserRound size={16} aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold">Pesan lebih cepat dengan akun</p>
-                    <p className="mt-0.5 text-[11px] leading-relaxed text-nnorte-muted">Nama dan nomor telepon otomatis terisi saat checkout.</p>
-                  </div>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <Button size="sm" className="flex-1 sm:flex-none" icon={<LogIn size={13} />} onClick={() => openAuth('login')}>Masuk</Button>
-                  <Button size="sm" variant="secondary" className="flex-1 sm:flex-none" icon={<UserPlus size={13} />} onClick={() => openAuth('register')}>Daftar</Button>
-                </div>
-              </section>
-            )}
-
             <section className="space-y-2.5">
               <div className="flex items-end justify-between gap-3">
                 <div>
@@ -875,12 +1026,26 @@ export const CustomerPortal: React.FC = () => {
             </section>
 
             <section id="portal-menu" className="scroll-mt-24 space-y-4">
-              <div className="flex items-end justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-nnorte-red">Katalog</p>
                   <h2 className="text-xl font-black tracking-tight">Daftar Hidangan</h2>
                 </div>
-                <span className="text-[10px] text-nnorte-muted">{visible.length} menu</span>
+                <div className="flex items-center gap-3">
+                  <div className="relative min-w-0 flex-1 sm:w-72 sm:flex-none lg:hidden">
+                    <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-nnorte-muted" aria-hidden="true" />
+                    <input
+                      type="search"
+                      id="menu-search"
+                      aria-label="Cari menu"
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder="Cari makanan atau minuman…"
+                      className={`${inputClass()} pl-9`}
+                    />
+                  </div>
+                  <span className="shrink-0 text-[10px] text-nnorte-muted">{visible.length} menu</span>
+                </div>
               </div>
 
               {menuError ? (
@@ -900,28 +1065,52 @@ export const CustomerPortal: React.FC = () => {
                   {visible.map((m, i) => (
                     <li
                       key={m.id}
-                      className="nn-rise group flex flex-col overflow-hidden rounded-2xl border border-nnorte-border bg-nnorte-surface shadow-sm transition-colors hover:border-nnorte-red/35"
+                      className="nn-rise group relative flex flex-col overflow-hidden rounded-2xl border border-nnorte-border bg-nnorte-surface shadow-sm transition-colors hover:border-nnorte-red/35"
                       style={{ ['--i' as string]: Math.min(i, 8) }}
                     >
-                      <div className="relative aspect-[4/3] w-full overflow-hidden bg-nnorte-sidebar">
+                      <button type="button" onClick={() => openItem(m)} aria-label={`Lihat deskripsi ${m.name}`} className="relative aspect-[4/3] w-full cursor-pointer overflow-hidden bg-nnorte-sidebar text-left">
                         {m.image ? (
                           <img src={m.image} alt={m.name} loading="lazy" className={`nnorte-product-image h-full w-full object-cover transition-transform duration-500 group-hover:scale-105 ${m.soldOut ? 'opacity-55' : ''}`} />
                         ) : (
                           <span className="flex h-full items-center justify-center text-nnorte-muted"><Utensils size={28} aria-hidden="true" /></span>
                         )}
                         <span className="absolute left-2.5 top-2.5 rounded-md border border-white/10 bg-black/55 px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-white backdrop-blur">{m.category}</span>
-                        <span className="absolute right-2.5 top-2.5 flex flex-col items-end gap-1">
+                        <span className="absolute right-2.5 top-11 flex flex-col items-end gap-1">
                           {m.isPopular && <span className="inline-flex items-center gap-0.5 rounded-full bg-nnorte-red px-1.5 py-0.5 text-[8px] font-bold text-nnorte-on-brand shadow-sm"><Star size={8} className="fill-current" aria-hidden="true" /> Favorit</span>}
                           {m.isSpicy && <span className="inline-flex items-center gap-0.5 rounded-full bg-nnorte-warning px-1.5 py-0.5 text-[8px] font-bold text-nnorte-bg shadow-sm"><Flame size={8} className="fill-current" aria-hidden="true" /> Pedas</span>}
                           {m.soldOut && <span className="rounded-full bg-black/70 px-1.5 py-0.5 text-[8px] font-bold text-white backdrop-blur">Habis</span>}
                         </span>
-                      </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => void toggleMenuFavorite(event, m)}
+                        aria-label={menuMetrics[m.id]?.isFavorite ? `Hapus ${m.name} dari favorit` : `Simpan ${m.name} ke favorit`}
+                        aria-pressed={menuMetrics[m.id]?.isFavorite === true}
+                        disabled={favoritePending[m.id]}
+                        className={`nn-press absolute right-2.5 top-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-white/30 bg-black/55 text-white shadow-lg backdrop-blur hover:scale-105 disabled:cursor-wait disabled:opacity-70 ${menuMetrics[m.id]?.isFavorite ? 'text-nnorte-red-soft' : ''}`}
+                      >
+                        <Heart size={16} className={menuMetrics[m.id]?.isFavorite ? 'fill-current' : ''} aria-hidden="true" />
+                      </button>
                       <div className="flex flex-1 flex-col p-3.5">
                         <div className="flex items-center justify-between gap-2 text-[9px] text-nnorte-muted">
                           <span className="truncate font-bold uppercase tracking-wider text-nnorte-red">{m.category}</span>
                           {m.prepMinutes > 0 && <span className="inline-flex shrink-0 items-center gap-0.5"><Clock size={9} aria-hidden="true" /> ±{m.prepMinutes} mnt</span>}
                         </div>
                         <h3 className="mt-1 text-[13px] font-bold leading-snug">{m.name}</h3>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[9px] text-nnorte-muted">
+                          {menuMetricsState === 'unavailable' ? (
+                            <span>Statistik belum tersedia</span>
+                          ) : menuMetricsState === 'loading' ? (
+                            <span>Memuat ulasan dan pesanan...</span>
+                          ) : menuMetrics[m.id]?.reviewCount ? (
+                            <span className="inline-flex items-center gap-0.5">
+                              <Star size={10} className="fill-current text-nnorte-warning" aria-hidden="true" />
+                              <span className="font-semibold text-nnorte-warning">{menuMetrics[m.id].averageRating.toFixed(1)}</span>
+                              <span>({menuMetrics[m.id].reviewCount} ulasan)</span>
+                            </span>
+                          ) : <span>Belum ada ulasan</span>}
+                          {menuMetricsState === 'ready' && <span>{menuMetrics[m.id]?.orderCount ?? 0} pesanan</span>}
+                        </div>
                         <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-nnorte-muted">{m.description || 'Hidangan pilihan dari dapur NNORTE.'}</p>
                         <div className="mt-auto flex items-center justify-between gap-2 pt-3">
                           <span className="text-sm font-black text-nnorte-red">{formatRupiah(m.price)}</span>
@@ -929,15 +1118,6 @@ export const CustomerPortal: React.FC = () => {
                             <span className="text-[10px] font-semibold text-nnorte-muted">Habis</span>
                           ) : m.addons.length === 0 && m.variants.length === 0 ? (
                             <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                aria-label={`Lihat detail ${m.name}`}
-                                title="Lihat detail"
-                                onClick={() => openItem(m)}
-                                className="nn-press inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-nnorte-border text-nnorte-muted hover:border-nnorte-blue/40 hover:text-nnorte-text"
-                              >
-                                <Info size={15} aria-hidden="true" />
-                              </button>
                               <AddToCartAnimation
                                 product={{ id: m.id, name: m.name, price: m.price, image: m.image ?? '' }}
                                 cartRef={cartRef}
@@ -965,7 +1145,7 @@ export const CustomerPortal: React.FC = () => {
         )}
       </main>
 
-      <footer className="mt-8 border-t border-nnorte-border bg-nnorte-sidebar/70">
+      <footer id="portal-about" className="mt-8 scroll-mt-24 border-t border-nnorte-border bg-nnorte-sidebar/70">
         <div className="mx-auto grid max-w-7xl gap-7 px-4 py-8 sm:px-6 md:grid-cols-12 lg:px-8">
           <div className="md:col-span-5">
             <div className="flex items-center gap-2.5">
@@ -1141,6 +1321,7 @@ export const CustomerPortal: React.FC = () => {
 
                 <dl className="space-y-1.5 rounded-xl border border-nnorte-border bg-nnorte-surface-2 p-3 text-[11px]">
                   <div className="flex justify-between gap-2"><dt className="text-nnorte-muted">Subtotal</dt><dd>{formatRupiah(subtotal)}</dd></div>
+                  {voucherDiscount > 0 && <div className="flex justify-between gap-2 text-nnorte-success"><dt>Kompensasi ({voucher?.discountPercent}%)</dt><dd>−{formatRupiah(voucherDiscount)}</dd></div>}
                   {tax > 0 && <div className="flex justify-between gap-2"><dt className="text-nnorte-muted">Pajak ({branch?.taxPercentage}%)</dt><dd>{formatRupiah(tax)}</dd></div>}
                   {service > 0 && <div className="flex justify-between gap-2"><dt className="text-nnorte-muted">Layanan ({branch?.servicePercentage}%)</dt><dd>{formatRupiah(service)}</dd></div>}
                   <div className="flex justify-between gap-2 border-t border-nnorte-border pt-1.5 text-xs font-black text-nnorte-red"><dt>Estimasi Total</dt><dd>{formatRupiah(totalEstimate)}</dd></div>
@@ -1180,6 +1361,16 @@ export const CustomerPortal: React.FC = () => {
                 <Field label="No. Telepon (opsional)" hint="Dipakai staf jika perlu menghubungi Anda.">
                   <input type="tel" maxLength={30} className={inputClass()} value={phone} onChange={(e) => { setPhone(e.target.value); setSubmitError(null); }} autoComplete="tel" placeholder="08xxxxxxxxxx" />
                 </Field>
+
+                <div className="rounded-xl border border-nnorte-border bg-nnorte-surface-2 p-3">
+                  <label htmlFor="compensation-voucher" className="text-[11px] font-bold">Kode kompensasi</label>
+                  <div className="mt-2 flex gap-2">
+                    <input id="compensation-voucher" value={voucherCode} onChange={(event) => { setVoucherCode(event.target.value.toUpperCase()); setVoucher(null); setVoucherError(null); }} className={`${inputClass()} min-w-0 flex-1 font-mono uppercase`} placeholder="SORRY-XXXXXXXX" />
+                    <Button variant="secondary" onClick={() => void applyVoucher()} loading={voucherBusy} disabled={!voucherCode.trim()}>Gunakan</Button>
+                  </div>
+                  {voucherError && <p role="alert" className="mt-2 text-[10px] text-nnorte-error">{voucherError}</p>}
+                  {voucher && <p className="mt-2 text-[10px] font-semibold text-nnorte-success">Voucher aktif: diskon {voucher.discountPercent}% hingga {formatRupiah(voucher.maxDiscount)}.</p>}
+                </div>
 
                 <fieldset>
                   <legend className="mb-1.5 text-[11px] font-semibold">Tipe Pemesanan</legend>
@@ -1254,6 +1445,7 @@ export const CustomerPortal: React.FC = () => {
                       items={trackItems}
                       orderRating={ratings?.orderRating ?? null}
                       orderReview={ratings?.orderReview ?? null}
+                      compensation={ratings?.compensation ?? null}
                       onRate={ratingsReady && canRateOrder ? handleRate : undefined}
                       onRateDone={() => { setOrderTab('cart'); closeAndBrowse(); }}
                     />
@@ -1343,6 +1535,7 @@ export const CustomerPortal: React.FC = () => {
             <p className="text-[10px] font-semibold uppercase tracking-wider text-nnorte-muted">Nomor pesanan</p>
             <p className="font-mono text-xl font-black">{lastOrder?.orderNumber ?? '—'}</p>
             {lastOrder && <p className="mt-1 text-sm font-black text-nnorte-red">{formatRupiah(lastOrder.total)}</p>}
+            {!!lastOrder?.discount && <p className="mt-1 text-xs font-semibold text-nnorte-success">Voucher menghemat {formatRupiah(lastOrder.discount)}</p>}
           </div>
           <div className="rounded-xl border border-nnorte-border bg-nnorte-surface-2 p-3 text-left text-[10px] leading-relaxed text-nnorte-muted">
             <p className="flex items-center gap-2 text-[11px] font-bold text-nnorte-text"><Banknote size={14} className="text-nnorte-red" aria-hidden="true" /> Pembayaran di kasir</p>
@@ -1484,50 +1677,6 @@ export const CustomerPortal: React.FC = () => {
         </div>
       </Modal>
 
-      <Modal
-        isOpen={optionFor !== null}
-        onClose={() => setOptionFor(null)}
-        title={optionFor?.name ?? ''}
-        subtitle="Informasi menu dan sesuaikan pesanan Anda"
-        maxWidth="md"
-        footer={optionFor ? <Button className="w-full sm:w-auto" onClick={confirmAddOption}>Tambah ke Keranjang · {formatRupiah(optUnit)}</Button> : undefined}
-      >
-        {optionFor && (
-          <div className="flex flex-col gap-4">
-            {optionFor.image && <img src={optionFor.image} alt="" className="h-32 w-full rounded-xl object-cover" />}
-            <MenuNutritionPanel ingredients={optionFor.ingredients} allergens={optionFor.allergens} />
-            {optionFor.variants.map((v) => (
-              <Field key={v.name} label={v.name}>
-                <select className={inputClass()} value={opt.variants[v.name] ?? ''} onChange={(e) => setOpt((o) => ({ ...o, variants: { ...o.variants, [v.name]: e.target.value } }))}>
-                  {v.options.map((o) => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </Field>
-            ))}
-            {optionFor.addons.length > 0 && (
-              <fieldset className="space-y-1">
-                <legend className="mb-1 text-[11px] font-semibold">Tambahan</legend>
-                {optionFor.addons.map((a) => (
-                  <label key={a.id} className="flex min-h-10 cursor-pointer items-center justify-between gap-3 rounded-lg border border-nnorte-border px-3 text-[11px]">
-                    <span className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 accent-[var(--c-red)]"
-                        checked={opt.addonIds.includes(a.id)}
-                        onChange={(e) => setOpt((o) => ({ ...o, addonIds: e.target.checked ? [...o.addonIds, a.id] : o.addonIds.filter((x) => x !== a.id) }))}
-                      />
-                      {a.name}
-                    </span>
-                    <span className="text-nnorte-muted">+{formatRupiah(a.price)}</span>
-                  </label>
-                ))}
-              </fieldset>
-            )}
-            <Field label="Catatan (opsional)" hint="Contoh: tanpa bawang, sambal terpisah.">
-              <input type="text" maxLength={200} className={inputClass()} value={opt.notes} onChange={(e) => setOpt((o) => ({ ...o, notes: e.target.value }))} />
-            </Field>
-          </div>
-        )}
-      </Modal>
     </div>
   );
 };

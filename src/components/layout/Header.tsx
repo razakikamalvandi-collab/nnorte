@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import {
   Menu,
@@ -13,11 +13,37 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, activeTabTitle }) => {
-  const { currentUser, branches, orders } = useApp();
+  const { currentUser, branches, orders, dataLoading } = useApp();
 
   const pendingOrdersCount = orders.filter(
     (o) => o.status === 'pending' || o.status === 'kitchen_queue'
   ).length;
+  const previousPendingCount = useRef(pendingOrdersCount);
+  const observedInitialLoad = useRef(false);
+  const notificationsInitialized = useRef(false);
+  const [badgeAnimationId, setBadgeAnimationId] = useState(0);
+  const [notificationAnnouncement, setNotificationAnnouncement] = useState('');
+
+  useEffect(() => {
+    if (!notificationsInitialized.current) {
+      if (dataLoading) {
+        observedInitialLoad.current = true;
+        previousPendingCount.current = pendingOrdersCount;
+        return;
+      }
+      if (!observedInitialLoad.current) return;
+      notificationsInitialized.current = true;
+      previousPendingCount.current = pendingOrdersCount;
+      return;
+    }
+    if (pendingOrdersCount > previousPendingCount.current) {
+      setBadgeAnimationId((current) => current + 1);
+      setNotificationAnnouncement(`Notifikasi baru. Total ${pendingOrdersCount} pesanan menunggu.`);
+    } else if (pendingOrdersCount < previousPendingCount.current) {
+      setNotificationAnnouncement('');
+    }
+    previousPendingCount.current = pendingOrdersCount;
+  }, [pendingOrdersCount, dataLoading]);
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-nnorte-border bg-nnorte-bg px-4 lg:px-8">
@@ -60,16 +86,17 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, activeTabTitle
         <div className="relative">
           <button
             type="button"
-            aria-label="Notifikasi"
+            aria-label={`Notifikasi, ${pendingOrdersCount} pesanan menunggu`}
             className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-nnorte-border bg-nnorte-surface text-nnorte-muted hover:border-nnorte-blue/40 hover:text-nnorte-text"
           >
-            <Bell size={16} />
+            <Bell size={16} aria-hidden="true" />
             {pendingOrdersCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-nnorte-red text-[10px] font-bold text-nnorte-on-brand shadow-md">
+              <span key={badgeAnimationId} data-new={badgeAnimationId > 0} aria-hidden="true" className="nn-notification-badge absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-nnorte-red text-[10px] font-bold text-nnorte-on-brand shadow-md">
                 {pendingOrdersCount}
               </span>
             )}
           </button>
+          <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">{notificationAnnouncement}</span>
         </div>
       </div>
     </header>

@@ -179,6 +179,7 @@ export const MasterKatalogMenu: React.FC = () => {
     currentUser,
     restaurantId,
     addMenuCategory,
+    deleteMenuCategory,
     addMasterMenu,
     updateMasterMenu,
     setMasterMenuStatus,
@@ -190,6 +191,14 @@ export const MasterKatalogMenu: React.FC = () => {
   } = useApp();
 
   const canEdit = currentUser?.role === 'owner';
+  const isBranchAdmin = currentUser?.role === 'branch_admin';
+  const branchId = isBranchAdmin ? currentUser?.branchId : undefined;
+  const canCreate = canEdit || isBranchAdmin;
+  const canManageCategories = canEdit || isBranchAdmin;
+  const branchMenuIds = useMemo(
+    () => new Set(branchMenus.filter((entry) => entry.branchId === branchId).map((entry) => entry.menuId)),
+    [branchMenus, branchId],
+  );
 
   const [cat, setCat] = useState('Semua');
   const [q, setQ] = useState('');
@@ -215,6 +224,7 @@ export const MasterKatalogMenu: React.FC = () => {
   const [categoryName, setCategoryName] = useState('');
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [categorySaving, setCategorySaving] = useState(false);
+  const [categoryDeleteBusy, setCategoryDeleteBusy] = useState<string | null>(null);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -223,7 +233,9 @@ export const MasterKatalogMenu: React.FC = () => {
   const categories = useMemo(() => {
     const byName = new Map<string, string>();
 
-    [...menuCategories, ...masterMenus.map((menu) => menu.category)].forEach(
+    [...menuCategories, ...masterMenus
+      .filter((menu) => !isBranchAdmin || branchMenuIds.has(menu.id))
+      .map((menu) => menu.category)].forEach(
       (raw) => {
         const name = raw.trim();
         if (!name) return;
@@ -236,7 +248,7 @@ export const MasterKatalogMenu: React.FC = () => {
     return Array.from(byName.values()).sort((a, b) =>
       a.localeCompare(b, 'id'),
     );
-  }, [menuCategories, masterMenus]);
+  }, [menuCategories, masterMenus, isBranchAdmin, branchMenuIds]);
 
   const filtered = masterMenus.filter((menu) => {
     const term = q.trim().toLowerCase();
@@ -244,6 +256,7 @@ export const MasterKatalogMenu: React.FC = () => {
     return (
       (cat === 'Semua' ||
         menu.category.trim().toLowerCase() === cat.toLowerCase()) &&
+      (!isBranchAdmin || branchMenuIds.has(menu.id)) &&
       (!term ||
         menu.name.toLowerCase().includes(term) ||
         menu.sku.toLowerCase().includes(term))
@@ -278,21 +291,22 @@ export const MasterKatalogMenu: React.FC = () => {
     });
     setErrors({});
     setFormError(null);
-    setTargets(
-      branches
-        .filter((branch) => branch.status === 'active')
-        .map((branch) => branch.id),
-    );
+    setTargets(canEdit
+      ? branches.filter((branch) => branch.status === 'active').map((branch) => branch.id)
+      : branchId ? [branchId] : []);
     resetImage();
     setOpen(true);
   };
 
   const openEdit = (menu: MasterMenuItem) => {
     setEditing(menu);
+    const usedByOtherBranch = isBranchAdmin && branchMenus.some(
+      (entry) => entry.menuId === menu.id && entry.branchId !== branchId,
+    );
 
     setForm({
       name: menu.name,
-      sku: menu.sku,
+      sku: usedByOtherBranch ? generateSku(menu.category, masterMenus, menu.id) : menu.sku,
       category:
         categories.find(
           (category) =>
@@ -360,11 +374,9 @@ export const MasterKatalogMenu: React.FC = () => {
 
     setErrors({});
     setFormError(null);
-    setTargets(
-      branches
-        .filter((branch) => branch.status === 'active')
-        .map((branch) => branch.id),
-    );
+    setTargets(canEdit
+      ? branches.filter((branch) => branch.status === 'active').map((branch) => branch.id)
+      : branchId ? [branchId] : []);
     resetImage();
     setOpen(true);
   };
@@ -469,6 +481,25 @@ export const MasterKatalogMenu: React.FC = () => {
     } finally {
       setCategorySaving(false);
     }
+  };
+
+  const removeCategory = async (category: string) => {
+    if (categoryDeleteBusy) return;
+    const affectedMenus = isBranchAdmin
+      ? masterMenus.filter((menu) => branchMenuIds.has(menu.id) && menu.category.trim().toLowerCase() === category.toLowerCase()).length
+      : masterMenus.filter((menu) => menu.category.trim().toLowerCase() === category.toLowerCase()).length;
+    const impact = isBranchAdmin && affectedMenus > 0
+      ? ` ${affectedMenus} menu di cabang ini akan dipindahkan ke kategori Lainnya.`
+      : '';
+    if (!window.confirm(`Hapus kategori ${category}?${impact}`)) return;
+    setCategoryDeleteBusy(category);
+    const result = await deleteMenuCategory(category);
+    setCategoryDeleteBusy(null);
+    if (!result.ok) {
+      addToast('error', result.error);
+      return;
+    }
+    if (cat.toLowerCase() === category.toLowerCase()) setCat('Semua');
   };
 
   const onPickFile = async (
@@ -592,6 +623,7 @@ export const MasterKatalogMenu: React.FC = () => {
 
     try {
       if (file) {
+        if (isBranchAdmin) throw new Error('Admin Cabang hanya dapat menambahkan menu tanpa foto.');
         uploaded = await uploadMenuImage(restaurantId, file);
       }
 
@@ -669,7 +701,9 @@ export const MasterKatalogMenu: React.FC = () => {
     );
 
     const confirmed = window.confirm(
-      used
+      isBranchAdmin
+        ? `Hapus ${menu.name} dari katalog cabang Anda? Menu di cabang lain tidak akan berubah.`
+        : used
         ? `Hapus ${menu.name}? Jika sudah pernah dipakai transaksi, menu akan diarsipkan (bukan dihapus permanen).`
         : `Hapus ${menu.name} dari katalog master?`,
     );
@@ -734,11 +768,13 @@ export const MasterKatalogMenu: React.FC = () => {
             Master Katalog Menu
           </h1>
           <p className="mt-1 text-xs text-nnorte-muted">
-            Katalog global yang dapat didistribusikan ke seluruh cabang.
+            {isBranchAdmin
+              ? 'Daftar menu yang tersedia untuk cabang Anda. Ubah harga dan ketersediaan melalui Menu & Harga Cabang.'
+              : 'Katalog global yang dapat didistribusikan ke seluruh cabang.'}
           </p>
         </div>
 
-        {canEdit && (
+        {canCreate && (
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="secondary"
@@ -761,8 +797,8 @@ export const MasterKatalogMenu: React.FC = () => {
         />
       )}
 
-      <div className="flex flex-col gap-3 rounded-xl border border-nnorte-border bg-nnorte-surface p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full sm:w-80">
+      <div className="grid min-w-0 grid-cols-1 items-center gap-3 rounded-xl border border-nnorte-border bg-nnorte-surface p-3 lg:grid-cols-[minmax(16rem,28rem)_minmax(0,1fr)]">
+        <div className="relative w-full min-w-0">
           <Search
             size={15}
             className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-nnorte-muted"
@@ -778,28 +814,29 @@ export const MasterKatalogMenu: React.FC = () => {
           />
         </div>
 
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto pb-1">
           {['Semua', ...categories].map((category) => (
-            <button
-              key={category}
-              type="button"
-              onClick={() => setCat(category)}
-              aria-pressed={cat === category}
-              className={`nn-press min-h-9 cursor-pointer rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
-                cat === category
-                  ? 'bg-nnorte-red text-nnorte-on-brand'
-                  : 'border border-nnorte-border bg-nnorte-surface-2 text-nnorte-muted hover:text-nnorte-text'
-              }`}
-            >
-              {category}
-            </button>
+            <div key={category} className="inline-flex shrink-0 items-center overflow-hidden rounded-lg border border-nnorte-border bg-nnorte-surface-2">
+              <button
+                type="button"
+                onClick={() => setCat(category)}
+                aria-pressed={cat === category}
+                className={`nn-press min-h-9 cursor-pointer whitespace-nowrap px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
+                  cat === category
+                    ? 'bg-nnorte-red text-nnorte-on-brand'
+                    : 'text-nnorte-muted hover:text-nnorte-text'
+                }`}
+              >
+                {category}
+              </button>
+            </div>
           ))}
 
-          {canEdit && (
+          {canManageCategories && (
             <button
               type="button"
               onClick={openAddCategory}
-              className="nn-press inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-lg border border-dashed border-nnorte-border bg-transparent px-2.5 py-1.5 text-[11px] font-semibold text-nnorte-muted transition-colors hover:border-nnorte-blue/50 hover:text-nnorte-text"
+              className="nn-press inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-lg border border-dashed border-nnorte-border bg-transparent px-2.5 py-1.5 text-[11px] font-semibold text-nnorte-muted transition-colors hover:border-nnorte-blue/50 hover:text-nnorte-text"
             >
               <Plus size={12} aria-hidden="true" />
               Tambah Kategori
@@ -812,13 +849,13 @@ export const MasterKatalogMenu: React.FC = () => {
         <EmptyState
           icon={Utensils}
           title="Belum ada menu"
-          description={
-            masterMenus.length === 0 && canEdit
+            description={
+            masterMenus.length === 0 && canCreate
               ? 'Tambahkan menu baru ke katalog master.'
               : 'Tidak ada menu yang cocok dengan filter.'
           }
           action={
-            masterMenus.length === 0 && canEdit ? (
+            masterMenus.length === 0 && canCreate ? (
               <Button
                 icon={<Plus size={14} />}
                 onClick={openAdd}
@@ -907,6 +944,12 @@ export const MasterKatalogMenu: React.FC = () => {
               </div>
 
               <div className="mt-auto space-y-2 border-t border-nnorte-border p-3">
+                {isBranchAdmin && (
+                  <div className="flex items-center justify-between gap-2 text-[10px]">
+                    <span className="text-nnorte-muted">Cabang Anda</span>
+                    <span className="font-bold text-nnorte-blue-soft">{branchMenus.find((entry) => entry.branchId === branchId && entry.menuId === menu.id)?.isAvailable === false ? 'Dinonaktifkan' : branchMenus.find((entry) => entry.branchId === branchId && entry.menuId === menu.id)?.isSoldOutToday ? 'Habis hari ini' : 'Tersedia'}</span>
+                  </div>
+                )}
                 {canEdit && (
                   <button
                     type="button"
@@ -937,7 +980,7 @@ export const MasterKatalogMenu: React.FC = () => {
                     {formatRupiah(menu.basePrice)}
                   </span>
 
-                  {canEdit && (
+                  {(canEdit || isBranchAdmin && branchMenuIds.has(menu.id)) && (
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
@@ -972,9 +1015,9 @@ export const MasterKatalogMenu: React.FC = () => {
         title={
           editing
             ? `Edit Menu: ${editing.name}`
-            : 'Tambah Menu Master Baru'
+            : isBranchAdmin ? 'Tambah Menu Cabang' : 'Tambah Menu Master Baru'
         }
-        subtitle="Harga dasar menjadi harga awal cabang; harga cabang yang sudah diubah tidak tertimpa."
+        subtitle={isBranchAdmin ? 'Menu baru hanya ditambahkan ke katalog cabang Anda.' : 'Harga dasar menjadi harga awal cabang; harga cabang yang sudah diubah tidak tertimpa.'}
         footer={
           <>
             <Button
@@ -1013,7 +1056,7 @@ export const MasterKatalogMenu: React.FC = () => {
             </p>
           )}
 
-          <Field
+          {canEdit && <Field
             label="Foto Menu"
             error={errors.image}
             hint={`JPEG, PNG, atau WebP, maksimal ${MAX_IMAGE_BYTES / 1024 / 1024} MB.`}
@@ -1025,9 +1068,9 @@ export const MasterKatalogMenu: React.FC = () => {
               onChange={(event) => void onPickFile(event)}
               className="block w-full cursor-pointer text-xs text-nnorte-muted file:mr-3 file:min-h-9 file:cursor-pointer file:rounded-lg file:border file:border-nnorte-border file:bg-nnorte-surface-2 file:px-3 file:text-xs file:font-semibold file:text-nnorte-text"
             />
-          </Field>
+          </Field>}
 
-          {shownPreview ? (
+          {canEdit ? (shownPreview ? (
             <div className="flex items-center gap-3">
               <img
                 src={shownPreview}
@@ -1058,7 +1101,7 @@ export const MasterKatalogMenu: React.FC = () => {
                 ? 'Foto akan dihapus saat disimpan'
                 : 'Belum ada foto'}
             </div>
-          )}
+          )) : null}
 
           <Field
             label="Nama Menu"
@@ -1158,14 +1201,14 @@ export const MasterKatalogMenu: React.FC = () => {
 
 
 
-          <button
+          {canEdit && <button
             type="button"
             onClick={openAddCategory}
             className="nn-press inline-flex min-h-9 cursor-pointer items-center gap-1 self-start rounded-lg border border-dashed border-nnorte-border px-2.5 py-1.5 text-[11px] font-semibold text-nnorte-muted transition-colors hover:border-nnorte-blue/50 hover:text-nnorte-text"
           >
             <Plus size={12} aria-hidden="true" />
             Tambah kategori baru
-          </button>
+          </button>}
 
           <Field
             label="Harga Dasar (Rp)"
@@ -1213,16 +1256,16 @@ export const MasterKatalogMenu: React.FC = () => {
             />
           </Field>
 
-          <fieldset className="space-y-2 rounded-xl border border-nnorte-border p-3">
+          {canCreate && <fieldset className="space-y-2 rounded-xl border border-nnorte-border p-3">
             <legend className="px-1 text-xs font-semibold text-nnorte-text">
               Bahan per Porsi
             </legend>
 
-            <p className="text-[11px] leading-relaxed text-nnorte-muted">
+            {canEdit && <p className="text-[11px] leading-relaxed text-nnorte-muted">
               Stok bahan di cabang berkurang sesuai takaran ini setiap
               satu porsi terjual. Nama dan satuan harus sama dengan
               stok bahan di cabang.
-            </p>
+            </p>}
 
             {form.ingredients.length === 0 ? (
               <p className="rounded-lg border border-dashed border-nnorte-border p-3 text-center text-[11px] text-nnorte-muted">
@@ -1298,17 +1341,17 @@ export const MasterKatalogMenu: React.FC = () => {
               </p>
             )}
 
-            <button
+            {canEdit && <button
               type="button"
               onClick={addRecipeRow}
               className="nn-press inline-flex min-h-9 cursor-pointer items-center gap-1 self-start rounded-lg border border-dashed border-nnorte-border px-2.5 py-1.5 text-[11px] font-semibold text-nnorte-muted transition-colors hover:border-nnorte-blue/50 hover:text-nnorte-text"
             >
               <Plus size={12} aria-hidden="true" />
               Tambah bahan
-            </button>
-          </fieldset>
+            </button>}
+          </fieldset>}
 
-          <Field label="Alergen">
+          {canEdit && <Field label="Alergen">
             <input
               type="text"
               className={inputClass()}
@@ -1318,9 +1361,9 @@ export const MasterKatalogMenu: React.FC = () => {
               }
               placeholder="Contoh: susu, kacang, gluten"
             />
-          </Field>
+          </Field>}
 
-          <label className="flex min-h-11 cursor-pointer items-center gap-2 text-xs text-nnorte-text">
+          {canEdit && <label className="flex min-h-11 cursor-pointer items-center gap-2 text-xs text-nnorte-text">
             <input
               type="checkbox"
               checked={form.isPopular}
@@ -1330,15 +1373,17 @@ export const MasterKatalogMenu: React.FC = () => {
               className="h-5 w-5 accent-[var(--c-red)]"
             />
             Tandai sebagai menu populer (Best Seller)
-          </label>
+          </label>}
 
-          {!editing && (
+          {!editing && canCreate && (
             <fieldset className="space-y-2 rounded-xl border border-nnorte-border p-3">
               <legend className="px-1 text-xs font-semibold text-nnorte-text">
-                Distribusi ke Cabang
+                {isBranchAdmin ? 'Cabang' : 'Distribusi ke Cabang'}
               </legend>
 
-              {branches.length === 0 ? (
+              {isBranchAdmin ? (
+                <p className="text-xs text-nnorte-muted">Menu akan ditambahkan hanya ke {branches.find((branch) => branch.id === branchId)?.name ?? 'cabang Anda'}.</p>
+              ) : branches.length === 0 ? (
                 <p className="text-xs text-nnorte-muted">
                   Belum ada cabang. Menu tetap tersimpan di katalog.
                 </p>
@@ -1373,7 +1418,7 @@ export const MasterKatalogMenu: React.FC = () => {
         isOpen={categoryOpen}
         onClose={closeCategory}
         busy={categorySaving}
-        title="Tambah Kategori"
+        title="Kelola Kategori"
         subtitle="Kategori baru langsung tersedia di filter dan form menu."
         maxWidth="sm"
         footer={
@@ -1386,12 +1431,7 @@ export const MasterKatalogMenu: React.FC = () => {
               Batal
             </Button>
 
-            <Button
-              type="submit"
-              form="category-form"
-              loading={categorySaving}
-              loadingText="Menyimpan..."
-            >
+            <Button type="submit" form="category-form" loading={categorySaving} loadingText="Menyimpan...">
               Tambah Kategori
             </Button>
           </>
@@ -1428,8 +1468,22 @@ export const MasterKatalogMenu: React.FC = () => {
           </Field>
 
           <p className="text-[11px] leading-relaxed text-nnorte-muted">
-            Kategori yang sudah ada tidak perlu ditambahkan lagi.
+            {isBranchAdmin ? 'Kategori yang dihapus akan memindahkan menu cabang ini ke kategori Lainnya; cabang lain tidak berubah.' : 'Kategori yang digunakan menu tidak dapat dihapus.'}
           </p>
+          <div className="space-y-1 border-t border-nnorte-border pt-3">
+            <p className="text-xs font-semibold text-nnorte-text">Kategori tersedia</p>
+            {categories.length === 0 ? <p className="text-[11px] text-nnorte-muted">Belum ada kategori.</p> : categories.map((category) => {
+              const usedByMenu = isBranchAdmin
+                ? masterMenus.some((menu) => branchMenuIds.has(menu.id) && menu.category.trim().toLowerCase() === category.toLowerCase())
+                : masterMenus.some((menu) => menu.category.trim().toLowerCase() === category.toLowerCase());
+              return <div key={category} className="flex items-center justify-between gap-2 rounded-lg bg-nnorte-surface-2 px-3 py-2">
+                <span className="truncate text-xs text-nnorte-text">{category}</span>
+                <button type="button" disabled={!isBranchAdmin && usedByMenu || categoryDeleteBusy === category} title={usedByMenu && !isBranchAdmin ? 'Masih digunakan oleh menu' : 'Hapus kategori'} onClick={() => void removeCategory(category)} className="nn-press inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-nnorte-border text-nnorte-muted hover:border-nnorte-red/50 hover:text-nnorte-red disabled:cursor-not-allowed disabled:opacity-40" aria-label={`Hapus kategori ${category}`}>
+                  {categoryDeleteBusy === category ? <span className="text-[10px]">…</span> : <Trash2 size={13} />}
+                </button>
+              </div>;
+            })}
+          </div>
         </form>
       </Modal>
 

@@ -49,7 +49,31 @@ export interface PortalOrderLine {
   addonIds: string[];
 }
 
-export interface PortalOrderResult { orderId: string; orderNumber: string; trackingToken: string; total: number }
+export interface PortalCompensationVoucher {
+  code: string;
+  discountPercent: number;
+  maxDiscount: number;
+  expiresAt: string;
+  redeemed?: boolean;
+}
+export interface PortalMenuReview {
+  rating: number;
+  review: string;
+  createdAt: string;
+}
+export interface PortalMenuReviews {
+  averageRating: number;
+  count: number;
+  reviews: PortalMenuReview[];
+}
+export interface PortalMenuMetrics {
+  menuItemId: string;
+  averageRating: number;
+  reviewCount: number;
+  orderCount: number;
+  isFavorite: boolean;
+}
+export interface PortalOrderResult { orderId: string; orderNumber: string; trackingToken: string; total: number; discount: number }
 export interface PortalOrderStatusItem {
   orderItemId?: string;
   menuItemId?: string;
@@ -72,6 +96,7 @@ export interface PortalOrderRatings {
   orderRating: number | null;
   orderReview: string | null;
   items: PortalOrderRatingItem[];
+  compensation: PortalCompensationVoucher | null;
 }
 
 type Row = Record<string, unknown>;
@@ -125,6 +150,37 @@ export async function fetchMenu(branchId: string): Promise<PortalMenuItem[]> {
   }));
 }
 
+export async function fetchMenuReviews(branchId: string, menuItemId: string): Promise<PortalMenuReviews> {
+  const rows = await rpc<Row[]>('portal_get_menu_reviews', { p_branch: branchId, p_menu_item: menuItemId });
+  const row = rows?.[0];
+  const reviews = Array.isArray(row?.reviews) ? (row.reviews as Row[]).flatMap((item): PortalMenuReview[] => {
+    const rating = n(item.rating);
+    const review = s(item.review).trim();
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5 || !review) return [];
+    return [{ rating, review, createdAt: s(item.created_at) }];
+  }) : [];
+  return { averageRating: n(row?.average_rating), count: n(row?.review_count), reviews };
+}
+
+export async function fetchMenuMetrics(branchId: string): Promise<PortalMenuMetrics[]> {
+  const rows = await rpc<Row[]>('portal_get_menu_metrics', { p_branch: branchId });
+  return (rows ?? []).map((row) => ({
+    menuItemId: s(row.menu_item_id),
+    averageRating: n(row.average_rating),
+    reviewCount: n(row.review_count),
+    orderCount: n(row.order_count),
+    isFavorite: row.is_favorite === true,
+  }));
+}
+
+export async function setMenuFavorite(branchId: string, menuItemId: string, favorite: boolean): Promise<void> {
+  await rpc<boolean>('portal_set_menu_favorite', {
+    p_branch: branchId,
+    p_menu_item: menuItemId,
+    p_favorite: favorite,
+  });
+}
+
 export async function resolveTable(token: string): Promise<PortalTable | null> {
   const rows = await rpc<Row[]>('portal_resolve_table', { p_token: token });
   const r = rows?.[0];
@@ -138,13 +194,15 @@ export async function createOrder(args: {
   customer: string;
   phone: string;
   lines: PortalOrderLine[];
+  voucherCode?: string | null;
 }): Promise<PortalOrderResult> {
-  const rows = await rpc<Row[]>('portal_create_order', {
+  const rows = await rpc<Row[]>('portal_create_order_with_voucher', {
     p_branch: args.branchId,
     p_qr_token: args.qrToken,
     p_order_type: args.orderType,
     p_customer: args.customer,
     p_phone: args.phone || null,
+    p_voucher: args.voucherCode?.trim() || null,
     p_items: args.lines.map((l) => ({
       menu_item_id: l.menuId,
       quantity: l.quantity,
@@ -155,7 +213,22 @@ export async function createOrder(args: {
   });
   const r = rows?.[0];
   if (!r) throw new Error('Pesanan tidak dapat dibuat.');
-  return { orderId: s(r.order_id), orderNumber: s(r.order_number), trackingToken: s(r.tracking_token), total: n(r.total_amount) };
+  return { orderId: s(r.order_id), orderNumber: s(r.order_number), trackingToken: s(r.tracking_token), total: n(r.total_amount), discount: n(r.discount_amount) };
+}
+
+const mapVoucher = (row?: Row): PortalCompensationVoucher | null => row && s(row.code) ? ({
+  code: s(row.code),
+  discountPercent: n(row.discount_percent),
+  maxDiscount: n(row.max_discount),
+  expiresAt: s(row.expires_at),
+  redeemed: row.redeemed === true,
+}) : null;
+
+export async function checkCompensationVoucher(branchId: string, code: string): Promise<PortalCompensationVoucher> {
+  const rows = await rpc<Row[]>('portal_check_compensation_voucher', { p_branch: branchId, p_code: code });
+  const voucher = mapVoucher(rows?.[0]);
+  if (!voucher) throw new Error('Kode kompensasi tidak valid.');
+  return voucher;
 }
 
 export async function fetchOrderStatus(orderId: string, token: string): Promise<PortalOrderStatus | null> {
@@ -196,14 +269,18 @@ export async function fetchOrderRatings(orderId: string, token: string): Promise
             item.rating <= 5,
         )
     : [];
+  const compensationRows = orderRating !== null && orderRating <= 2
+    ? await rpc<Row[]>('portal_get_rating_compensation', { p_order: orderId, p_token: token })
+    : [];
   return {
     orderRating,
     orderReview: s(data?.orderReview) || null,
     items,
+    compensation: mapVoucher(compensationRows?.[0]),
   };
 }
 
-export async function submitOrderRating(orderId: string, token: string, submissions: RatingSubmission[]): Promise<void> {
+export async function submitOrderRating(orderId: string, token: string, submissions: RatingSubmission[]): Promise<PortalCompensationVoucher | null> {
   const payload = buildRatingPayload(submissions);
   await rpc<Row>('portal_submit_order_rating', {
     p_order: orderId,
@@ -212,4 +289,6 @@ export async function submitOrderRating(orderId: string, token: string, submissi
     p_order_review: payload.orderReview,
     p_items: payload.items.map((item) => ({ orderItemId: item.orderItemId, rating: item.rating })),
   });
+  const voucherRows = await rpc<Row[]>('portal_issue_rating_compensation', { p_order: orderId, p_token: token });
+  return mapVoucher(voucherRows?.[0]);
 }

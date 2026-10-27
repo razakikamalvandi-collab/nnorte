@@ -132,6 +132,7 @@ export interface Order {
   orderType: OrderType;
   items: OrderItem[];
   subtotal: number;
+  discount: number;
   tax: number; // 10%
   serviceCharge: number; // 5%
   totalAmount: number;
